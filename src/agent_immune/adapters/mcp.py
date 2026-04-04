@@ -15,12 +15,20 @@ logger = logging.getLogger("agent_immune.adapters.mcp")
 
 
 class ImmuneMCPMiddleware:
-    """Assess JSON-RPC style MCP messages for tools/call and results."""
+    """Assess JSON-RPC style MCP messages for tools/call and results.
 
-    def __init__(self, immune: AdaptiveImmuneSystem) -> None:
+    Supports both sync (``assess``) and async (``assess_async``) backends.
+    When used in an async event loop the middleware automatically delegates to
+    the non-blocking ``*_async`` methods.
+    """
+
+    def __init__(self, immune: AdaptiveImmuneSystem, *, use_async: bool = False) -> None:
         """
         Args:
             immune: AdaptiveImmuneSystem instance.
+            use_async: If True, use the ``*_async`` methods internally so that
+                       embedding work runs in a background thread and does not
+                       block the event loop.
 
         Returns:
             None.
@@ -29,6 +37,7 @@ class ImmuneMCPMiddleware:
             None.
         """
         self._immune = immune
+        self._use_async = use_async
 
     async def intercept(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -50,7 +59,10 @@ class ImmuneMCPMiddleware:
         if method in ("tools/call", "tool_call", "tools.call"):
             params = m.get("params") or {}
             text = json.dumps(params, ensure_ascii=False)
-            a = self._immune.assess(text, session_id=session_id)
+            if self._use_async:
+                a = await self._immune.assess_async(text, session_id=session_id)
+            else:
+                a = self._immune.assess(text, session_id=session_id)
             if a.action in (ThreatAction.BLOCK, ThreatAction.REVIEW):
                 return {
                     "error": {
@@ -63,7 +75,10 @@ class ImmuneMCPMiddleware:
         if isinstance(result, dict) and "content" in result:
             parts = result.get("content") or []
             blob = json.dumps(parts, ensure_ascii=False)
-            scan = self._immune.assess_output(blob, session_id=session_id)
+            if self._use_async:
+                scan = await self._immune.assess_output_async(blob, session_id=session_id)
+            else:
+                scan = self._immune.assess_output(blob, session_id=session_id)
             if self._immune.output_blocks(scan):
                 return {
                     "error": {
@@ -72,7 +87,10 @@ class ImmuneMCPMiddleware:
                     }
                 }
         if isinstance(result, str):
-            scan = self._immune.assess_output(result, session_id=session_id)
+            if self._use_async:
+                scan = await self._immune.assess_output_async(result, session_id=session_id)
+            else:
+                scan = self._immune.assess_output(result, session_id=session_id)
             if self._immune.output_blocks(scan):
                 return {
                     "error": {

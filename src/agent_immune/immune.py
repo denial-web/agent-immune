@@ -4,6 +4,7 @@ AdaptiveImmuneSystem orchestrates normalization, decomposition, memory, trajecto
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, List, Optional, Protocol, runtime_checkable
 
@@ -11,7 +12,7 @@ import numpy as np
 
 from agent_immune.core.accumulator import SessionAccumulatorRegistry
 from agent_immune.core.decomposer import InputDecomposer
-from agent_immune.core.models import OutputScanResult, ThreatAssessment
+from agent_immune.core.models import OutputScanResult, SecurityPolicy, ThreatAssessment
 from agent_immune.core.normalizer import InputNormalizer
 from agent_immune.core.output_scanner import OutputScanner
 from agent_immune.core.scorer import ThreatScorer
@@ -43,6 +44,7 @@ class AdaptiveImmuneSystem:
         self,
         embedder: Optional[Embedder] = None,
         bank: Optional[AdversarialMemoryBank] = None,
+        policy: Optional[SecurityPolicy] = None,
     ) -> None:
         """
         Create orchestrator.
@@ -50,6 +52,7 @@ class AdaptiveImmuneSystem:
         Args:
             embedder: Optional Embedder (e.g. TextEmbedder); if None, memory features are disabled.
             bank: Optional AdversarialMemoryBank; if None but embedder set, a new bank is created.
+            policy: Optional SecurityPolicy with tunable thresholds; uses defaults if None.
 
         Returns:
             None.
@@ -57,11 +60,12 @@ class AdaptiveImmuneSystem:
         Raises:
             None.
         """
+        self._policy = policy or SecurityPolicy()
         self._normalizer = InputNormalizer()
         self._decomposer = InputDecomposer()
         self._output_scanner = OutputScanner()
-        self._scorer = ThreatScorer()
-        self._accumulators = SessionAccumulatorRegistry()
+        self._scorer = ThreatScorer(policy=self._policy)
+        self._accumulators = SessionAccumulatorRegistry(max_sessions=self._policy.max_sessions)
         self._embedder = embedder
         self._bank = bank
         if embedder is not None and bank is None:
@@ -69,6 +73,11 @@ class AdaptiveImmuneSystem:
 
             self._bank = AdversarialMemoryBank(embedder)
         self._cycles = 0
+
+    @property
+    def policy(self) -> SecurityPolicy:
+        """The active security policy."""
+        return self._policy
 
     def assess(self, text: str, session_id: str = "default") -> ThreatAssessment:
         """
@@ -151,13 +160,13 @@ class AdaptiveImmuneSystem:
         logger.debug("assess_output session=%s score=%s", session_id, result.exfiltration_score)
         return result
 
-    def output_blocks(self, scan: OutputScanResult, threshold: float = 0.72) -> bool:
+    def output_blocks(self, scan: OutputScanResult, threshold: Optional[float] = None) -> bool:
         """
         Return True if output scan should be treated as blocking.
 
         Args:
             scan: Result from assess_output.
-            threshold: Exfiltration score threshold for block.
+            threshold: Exfiltration score threshold for block. Defaults to policy.output_block_threshold.
 
         Returns:
             True if output should not be delivered as-is.
@@ -165,7 +174,8 @@ class AdaptiveImmuneSystem:
         Raises:
             None.
         """
-        return scan.exfiltration_score >= threshold
+        t = threshold if threshold is not None else self._policy.output_block_threshold
+        return scan.exfiltration_score >= t
 
     def learn(self, text: str, category: str = "suspected", confidence: float = 0.5) -> Optional[str]:
         """
@@ -306,3 +316,28 @@ class AdaptiveImmuneSystem:
         if assessment.decomposition is None:
             return ""
         return assessment.decomposition.clean_text
+
+    # ------------------------------------------------------------------
+    # Async API — non-blocking wrappers for use in async agent frameworks
+    # ------------------------------------------------------------------
+
+    async def assess_async(self, text: str, session_id: str = "default") -> ThreatAssessment:
+        """Async version of :meth:`assess`. Runs CPU-bound work in a thread."""
+        return await asyncio.to_thread(self.assess, text, session_id)
+
+    async def assess_output_async(self, text: str, session_id: str = "default") -> OutputScanResult:
+        """Async version of :meth:`assess_output`."""
+        return await asyncio.to_thread(self.assess_output, text, session_id)
+
+    async def learn_async(self, text: str, category: str = "suspected", confidence: float = 0.5) -> Optional[str]:
+        """Async version of :meth:`learn`."""
+        return await asyncio.to_thread(self.learn, text, category, confidence)
+
+    async def train_from_corpus_async(
+        self,
+        attacks: list[str],
+        category: str = "confirmed",
+        confidence: float = 0.90,
+    ) -> int:
+        """Async version of :meth:`train_from_corpus`."""
+        return await asyncio.to_thread(self.train_from_corpus, attacks, category, confidence)

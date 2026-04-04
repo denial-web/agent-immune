@@ -24,3 +24,4 @@ bench/results/
 .idea/
 .vscode/
 *.iml
+.coverage

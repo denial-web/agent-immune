@@ -143,7 +143,7 @@ class ImmuneIntegration:
         out = result.get("output") or result.get("content") or ""
         if isinstance(out, str) and out:
             scan = self._immune.assess_output(out, session_id=str(context.get("session_id", "default")))
-            if self._immune.output_blocks(scan, threshold=0.72):
+            if self._immune.output_blocks(scan):
                 _policy_violation(
                     f"agent-immune blocked output exfiltration (score={scan.exfiltration_score:.2f})",
                 )

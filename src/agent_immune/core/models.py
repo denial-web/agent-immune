@@ -9,7 +9,7 @@ import time
 from enum import Enum
 from typing import List, Optional, Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ThreatAction(str, Enum):
@@ -19,6 +19,26 @@ class ThreatAction(str, Enum):
     SANITIZE = "sanitize"
     REVIEW = "review"
     BLOCK = "block"
+
+
+class SecurityPolicy(BaseModel):
+    """
+    Tunable knobs for threat detection sensitivity.
+
+    Pass an instance to ``AdaptiveImmuneSystem(policy=...)`` to override defaults.
+    Higher thresholds = more permissive; lower = more aggressive.
+    """
+
+    allow_threshold: float = Field(default=0.40, ge=0.0, le=1.0, description="Max score for ALLOW")
+    sanitize_threshold: float = Field(default=0.55, ge=0.0, le=1.0, description="Max score for SANITIZE")
+    review_threshold: float = Field(default=0.72, ge=0.0, le=1.0, description="Max score for REVIEW; above this = BLOCK")
+    output_block_threshold: float = Field(default=0.72, ge=0.0, le=1.0, description="Output exfiltration score that triggers block")
+    memory_confirm_threshold: float = Field(default=0.90, ge=0.0, le=1.0, description="Similarity to confirmed memory entry that forces BLOCK")
+    memory_review_threshold: float = Field(default=0.82, ge=0.0, le=1.0, description="Similarity that upgrades to REVIEW when combined with patterns")
+    escalation_upgrade: bool = Field(default=True, description="Whether escalation detection upgrades action severity")
+    max_sessions: int = Field(default=10000, ge=1, description="LRU cap on session accumulator registry")
+
+    model_config = ConfigDict(frozen=True)
 
 
 class PatternHit(BaseModel):

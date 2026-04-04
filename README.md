@@ -24,6 +24,26 @@ if a.action == ThreatAction.BLOCK:
     ...
 ```
 
+### Custom security policy
+
+```python
+from agent_immune import AdaptiveImmuneSystem, SecurityPolicy
+
+# Strict: flag more aggressively
+strict = SecurityPolicy(allow_threshold=0.20, review_threshold=0.45, output_block_threshold=0.50)
+immune = AdaptiveImmuneSystem(policy=strict)
+```
+
+### Async support
+
+All core methods have async variants for non-blocking use in agent frameworks:
+
+```python
+result = await immune.assess_async("user input", session_id="s1")
+scan   = await immune.assess_output_async("model output")
+await immune.learn_async("attack text", category="confirmed")
+```
+
 ## Conceptual comparison
 
 | Attack | Rule-only (typical) | + agent-immune memory |

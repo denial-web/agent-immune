@@ -5,9 +5,9 @@ Combine pattern, memory, trajectory, and normalization signals into ThreatAssess
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import List, Optional
 
-from agent_immune.core.models import DecompositionResult, ThreatAction, ThreatAssessment
+from agent_immune.core.models import DecompositionResult, SecurityPolicy, ThreatAction, ThreatAssessment
 
 logger = logging.getLogger("agent_immune.core.scorer")
 
@@ -15,32 +15,15 @@ logger = logging.getLogger("agent_immune.core.scorer")
 class ThreatScorer:
     """Map component scores to ThreatAssessment with thresholds and override rules."""
 
-    def __init__(
-        self,
-        allow_threshold: float = 0.40,
-        sanitize_threshold: float = 0.55,
-        review_threshold: float = 0.72,
-        block_threshold: float = 0.72,
-    ) -> None:
-        """
-        Initialize scorer thresholds.
-
-        Args:
-            allow_threshold: Maximum score for ALLOW.
-            sanitize_threshold: Upper bound for SANITIZE band.
-            review_threshold: Upper bound for REVIEW band.
-            block_threshold: Minimum score for BLOCK.
-
-        Returns:
-            None.
-
-        Raises:
-            None.
-        """
-        self._allow = allow_threshold
-        self._sanitize = sanitize_threshold
-        self._review = review_threshold
-        self._block = block_threshold
+    def __init__(self, policy: Optional[SecurityPolicy] = None) -> None:
+        p = policy or SecurityPolicy()
+        self._allow = p.allow_threshold
+        self._sanitize = p.sanitize_threshold
+        self._review = p.review_threshold
+        self._block = p.review_threshold
+        self._memory_confirm = p.memory_confirm_threshold
+        self._memory_review = p.memory_review_threshold
+        self._escalation_upgrade = p.escalation_upgrade
 
     def score(
         self,
@@ -99,13 +82,13 @@ class ThreatScorer:
 
         action = self._to_action(threat_score)
 
-        if confirmed_memory_hit and max_memory_similarity >= 0.90:
+        if confirmed_memory_hit and max_memory_similarity >= self._memory_confirm:
             action = ThreatAction.BLOCK
             threat_score = max(threat_score, self._block)
-        elif max_memory_similarity >= 0.82 and pattern_score >= 0.30:
+        elif max_memory_similarity >= self._memory_review and pattern_score >= 0.30:
             action = max_action(action, ThreatAction.REVIEW)
             threat_score = max(threat_score, self._review - 0.01)
-        elif is_escalating and threat_score >= 0.40:
+        elif self._escalation_upgrade and is_escalating and threat_score >= 0.40:
             action = max_action(action, ThreatAction.SANITIZE)
 
         feedback: List[str] = []
