@@ -54,6 +54,9 @@ dev = [
     "ruff>=0.1",
 ]
 
+[project.scripts]
+agent-immune = "agent_immune.__main__:main"
+
 [project.urls]
 Homepage = "https://github.com/denny/agent-immune"
 Documentation = "https://github.com/denny/agent-immune/tree/main/docs"
