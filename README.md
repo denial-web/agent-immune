@@ -44,6 +44,29 @@ scan   = await immune.assess_output_async("model output")
 await immune.learn_async("attack text", category="confirmed")
 ```
 
+### JSON persistence & threat sharing
+
+```python
+immune.save("bank.json")              # human-readable JSON (default)
+immune.load("bank.json")              # restore from JSON
+
+threats = immune.export_threats()      # portable dicts — no embeddings
+immune2.import_threats(threats)        # re-embeds on ingest
+```
+
+### Observability
+
+```python
+from agent_immune import AdaptiveImmuneSystem, MetricsCollector
+
+metrics = MetricsCollector()
+immune = AdaptiveImmuneSystem(metrics=metrics)
+immune.assess("some text")
+print(metrics.snapshot())  # counters, latency, block rate
+```
+
+Structured JSON events are emitted to the `agent_immune.events` logger — pipe them to any log aggregator.
+
 ## Conceptual comparison
 
 | Attack | Rule-only (typical) | + agent-immune memory |

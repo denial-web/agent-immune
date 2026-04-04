@@ -75,6 +75,54 @@ entry  = await immune.learn_async("attack text", category="confirmed")
 count  = await immune.train_from_corpus_async(["attack1", "attack2"])
 ```
 
+## JSON persistence & threat sharing
+
+```python
+from agent_immune import AdaptiveImmuneSystem
+
+immune = AdaptiveImmuneSystem()
+immune.learn("attack text", category="confirmed", confidence=0.95)
+
+# Save / load (JSON by default — safe, human-readable)
+immune.save("bank.json")
+immune.load("bank.json")
+
+# Legacy pickle with HMAC signing
+immune.save("bank.pkl", format="pickle")
+
+# Export threats as portable dicts for sharing across instances
+threats = immune.export_threats()                 # no embeddings by default
+threats_full = immune.export_threats(include_embeddings=True)
+
+# Import on another instance (re-embeds automatically)
+other = AdaptiveImmuneSystem()
+added = other.import_threats(threats)
+```
+
+## Observability
+
+```python
+from agent_immune import AdaptiveImmuneSystem, MetricsCollector
+from agent_immune.observability import configure_json_logging
+
+# Structured JSON logging to stderr
+configure_json_logging()
+
+# Metrics collection
+metrics = MetricsCollector()
+immune = AdaptiveImmuneSystem(metrics=metrics)
+
+immune.assess("some input")
+immune.assess_output("some output")
+
+# Point-in-time counters
+snap = metrics.snapshot()
+# {'assessments_total': 1, 'blocks_total': 0, 'allows_total': 1,
+#  'output_scans_total': 1, 'latency_avg_ms': 0.42, ...}
+```
+
+Every `assess()` and `assess_output()` call emits a structured JSON event to the `agent_immune.events` logger with action, scores, session_id, and latency — pipe it to any log aggregator.
+
 ## Memory (semantic)
 
 ```bash

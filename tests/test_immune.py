@@ -298,3 +298,54 @@ def test_train_from_corpus_async() -> None:
     count = asyncio.run(immune.train_from_corpus_async(["steal user data", "exfiltrate secrets"]))
     assert count == 2
     assert immune._bank is not None
+
+
+# ---------- JSON persistence via immune.py ----------
+
+
+def test_save_load_json_via_immune() -> None:
+    import tempfile
+    from agent_immune.memory.embedder import TextEmbedder
+    from agent_immune.memory.bank import AdversarialMemoryBank
+
+    emb = TextEmbedder(model_name="hash-fallback")
+    bank = AdversarialMemoryBank(emb)
+    immune = AdaptiveImmuneSystem(embedder=emb, bank=bank)
+    immune.learn("test attack for json", category="confirmed", confidence=0.9)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+        path = tmp.name
+    try:
+        immune.save(path)
+        emb2 = TextEmbedder(model_name="hash-fallback")
+        bank2 = AdversarialMemoryBank(emb2)
+        immune2 = AdaptiveImmuneSystem(embedder=emb2, bank=bank2)
+        immune2.load(path)
+        sim, _, _ = bank2.query_similarity("test attack for json")
+        assert sim > 0.99
+    finally:
+        import os
+        os.unlink(path)
+
+
+def test_export_import_threats_via_immune() -> None:
+    from agent_immune.memory.embedder import TextEmbedder
+
+    emb = TextEmbedder(model_name="hash-fallback")
+    immune = AdaptiveImmuneSystem(embedder=emb)
+    immune.learn("shareable attack 1", category="confirmed", confidence=0.9)
+    immune.learn("shareable attack 2", category="suspected", confidence=0.6)
+
+    exported = immune.export_threats()
+    assert len(exported) == 2
+    assert "embedding" not in exported[0]
+
+    immune2 = AdaptiveImmuneSystem()
+    added = immune2.import_threats(exported)
+    assert added == 2
+    assert immune2._bank is not None
+
+
+def test_export_without_bank_returns_empty() -> None:
+    immune = AdaptiveImmuneSystem()
+    assert immune.export_threats() == []

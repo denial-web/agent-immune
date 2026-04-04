@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import logging
 import pickle
 import threading
@@ -354,3 +355,86 @@ class AdversarialMemoryBank:
             self._confirmed = [AdversarialEntry.from_dict(d) for d in payload["confirmed"]]
             self._suspected = [AdversarialEntry.from_dict(d) for d in payload["suspected"]]
             self._by_hash = {e.text_hash: e for e in self._confirmed + self._suspected}
+
+    def save_json(self, path: str) -> None:
+        """
+        Persist bank state as human-readable JSON. Safe — no pickle deserialization risks.
+
+        Args:
+            path: File path to write (.json recommended).
+        """
+        with self._lock:
+            payload = {
+                "version": _SCHEMA_VERSION,
+                "dim": self._dim,
+                "confirmed": [e.to_dict() for e in self._confirmed],
+                "suspected": [e.to_dict() for e in self._suspected],
+            }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    def load_json(self, path: str) -> None:
+        """
+        Load bank state from JSON file.
+
+        Args:
+            path: File path to read.
+
+        Raises:
+            OSError: On I/O errors.
+            ValueError: On schema mismatch.
+        """
+        with open(path, encoding="utf-8") as f:
+            payload = json.load(f)
+        if not isinstance(payload, dict) or payload.get("version") != _SCHEMA_VERSION:
+            raise ValueError("unsupported bank snapshot schema")
+        with self._lock:
+            self._dim = payload.get("dim")
+            self._confirmed = [AdversarialEntry.from_dict(d) for d in payload["confirmed"]]
+            self._suspected = [AdversarialEntry.from_dict(d) for d in payload["suspected"]]
+            self._by_hash = {e.text_hash: e for e in self._confirmed + self._suspected}
+
+    def export_threats(self, include_embeddings: bool = False) -> list[dict]:
+        """
+        Export all entries as a portable list of dicts for threat intelligence sharing.
+
+        Args:
+            include_embeddings: If True, include embedding vectors (large).
+                                If False, only text/metadata are exported.
+
+        Returns:
+            List of dicts, one per stored threat.
+        """
+        with self._lock:
+            entries = self._confirmed + self._suspected
+        out = []
+        for e in entries:
+            d = e.to_dict()
+            if not include_embeddings:
+                d.pop("embedding", None)
+            out.append(d)
+        return out
+
+    def import_threats(self, entries: list[dict]) -> int:
+        """
+        Import threats from a portable list of dicts (e.g. from another bank's export).
+
+        Re-embeds text for entries that lack embedding vectors.
+
+        Args:
+            entries: List of dicts with at minimum ``text`` and ``tier`` keys.
+
+        Returns:
+            Number of new entries added.
+        """
+        added = 0
+        for d in entries:
+            text = d.get("text", "").strip()
+            if not text:
+                continue
+            tier = d.get("tier", "suspected")
+            confidence = float(d.get("confidence", 0.5))
+            _, is_new = self._add_threat_internal(text, category=tier, confidence=confidence)
+            if is_new:
+                added += 1
+        return added

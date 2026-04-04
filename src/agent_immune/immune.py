@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time as _time
 from typing import TYPE_CHECKING, List, Optional, Protocol, runtime_checkable
 
 import numpy as np
@@ -45,6 +46,7 @@ class AdaptiveImmuneSystem:
         embedder: Optional[Embedder] = None,
         bank: Optional[AdversarialMemoryBank] = None,
         policy: Optional[SecurityPolicy] = None,
+        metrics: Optional[object] = None,
     ) -> None:
         """
         Create orchestrator.
@@ -53,6 +55,7 @@ class AdaptiveImmuneSystem:
             embedder: Optional Embedder (e.g. TextEmbedder); if None, memory features are disabled.
             bank: Optional AdversarialMemoryBank; if None but embedder set, a new bank is created.
             policy: Optional SecurityPolicy with tunable thresholds; uses defaults if None.
+            metrics: Optional MetricsCollector for observability; if None, no metrics are emitted.
 
         Returns:
             None.
@@ -68,6 +71,7 @@ class AdaptiveImmuneSystem:
         self._accumulators = SessionAccumulatorRegistry(max_sessions=self._policy.max_sessions)
         self._embedder = embedder
         self._bank = bank
+        self._metrics = metrics
         if embedder is not None and bank is None:
             from agent_immune.memory.bank import AdversarialMemoryBank
 
@@ -93,6 +97,7 @@ class AdaptiveImmuneSystem:
         Raises:
             None.
         """
+        t0 = _time.monotonic()
         norm = self._normalizer.normalize(text)
         decomp = self._decomposer.decompose(norm)
 
@@ -136,7 +141,11 @@ class AdaptiveImmuneSystem:
         self._cycles += 1
         if self._cycles % 100 == 0 and self._bank is not None:
             self.decay_memory()
-        logger.debug("assess session=%s action=%s", session_id, assessment.action)
+
+        latency_ms = (_time.monotonic() - t0) * 1000.0
+        if self._metrics is not None:
+            self._metrics.record_assessment(assessment, latency_ms=latency_ms)
+        logger.debug("assess session=%s action=%s latency=%.1fms", session_id, assessment.action, latency_ms)
         return assessment
 
     def assess_output(self, text: str, session_id: str = "default") -> OutputScanResult:
@@ -154,9 +163,12 @@ class AdaptiveImmuneSystem:
             None.
         """
         result = self._output_scanner.scan(text)
+        blocked = self.output_blocks(result)
         if result.exfiltration_score >= 0.5:
             acc = self._accumulators.get(f"__output__{session_id}")
             acc.update(min(1.0, result.exfiltration_score))
+        if self._metrics is not None:
+            self._metrics.record_output_scan(result, blocked=blocked)
         logger.debug("assess_output session=%s score=%s", session_id, result.exfiltration_score)
         return result
 
@@ -195,7 +207,10 @@ class AdaptiveImmuneSystem:
         if self._bank is None:
             logger.warning("learn called without memory bank")
             return None
-        return self._bank.add_threat(text, category=category, confidence=confidence)
+        entry_id = self._bank.add_threat(text, category=category, confidence=confidence)
+        if entry_id is not None and self._metrics is not None:
+            self._metrics.record_learn()
+        return entry_id
 
     def train_from_corpus(
         self,
@@ -251,39 +266,69 @@ class AdaptiveImmuneSystem:
         if self._bank is not None:
             self._bank.decay_suspected()
 
-    def save(self, path: str) -> None:
+    def save(self, path: str, *, format: str = "json") -> None:
         """
         Persist adversarial memory bank.
 
         Args:
             path: Destination file path.
-
-        Returns:
-            None.
-
-        Raises:
-            OSError: On I/O errors.
+            format: ``"json"`` (default, safe) or ``"pickle"`` (legacy).
         """
         if self._bank is None:
             return
-        self._bank.save(path)
+        if format == "json":
+            self._bank.save_json(path)
+        else:
+            self._bank.save(path)
 
-    def load(self, path: str) -> None:
+    def load(self, path: str, *, format: str = "json") -> None:
         """
         Load adversarial memory bank snapshot.
 
         Args:
             path: Source file path.
-
-        Returns:
-            None.
-
-        Raises:
-            OSError, ValueError: On failure.
+            format: ``"json"`` (default) or ``"pickle"`` (legacy).
         """
         if self._bank is None:
             return
-        self._bank.load(path)
+        if format == "json":
+            self._bank.load_json(path)
+        else:
+            self._bank.load(path)
+
+    def export_threats(self, include_embeddings: bool = False) -> list[dict]:
+        """
+        Export all stored threats as portable dicts for sharing.
+
+        Args:
+            include_embeddings: Include embedding vectors (large).
+
+        Returns:
+            List of threat dicts, or empty list if no bank.
+        """
+        if self._bank is None:
+            return []
+        return self._bank.export_threats(include_embeddings=include_embeddings)
+
+    def import_threats(self, entries: list[dict]) -> int:
+        """
+        Import threats from a portable list (e.g. from another instance's export).
+
+        Auto-initializes the memory bank if needed.
+
+        Args:
+            entries: List of dicts with at minimum ``text`` and ``tier`` keys.
+
+        Returns:
+            Number of new entries added.
+        """
+        if self._bank is None:
+            from agent_immune.memory.embedder import TextEmbedder
+            from agent_immune.memory.bank import AdversarialMemoryBank
+
+            self._embedder = TextEmbedder()
+            self._bank = AdversarialMemoryBank(self._embedder)
+        return self._bank.import_threats(entries)
 
     def reset_session(self, session_id: str) -> None:
         """

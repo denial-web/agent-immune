@@ -140,3 +140,92 @@ def test_tier_upgrade_on_readd(bank: AdversarialMemoryBank) -> None:
     bank.add_threat("upgrade me", category="confirmed")
     assert len(bank._suspected) == 0  # noqa: SLF001
     assert len(bank._confirmed) == 1  # noqa: SLF001
+
+
+def test_save_load_json_roundtrip(bank: AdversarialMemoryBank) -> None:
+    bank.add_threat("json roundtrip", category="confirmed", confidence=0.9)
+    bank.add_threat("suspected entry", category="suspected", confidence=0.5)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+        path = tmp.name
+    try:
+        bank.save_json(path)
+        emb = TextEmbedder(model_name="hash-fallback")
+        b2 = AdversarialMemoryBank(embedder=emb, max_entries=100)
+        b2.load_json(path)
+        sim, _, _ = b2.query_similarity("json roundtrip")
+        assert sim > 0.99
+        assert len(b2._confirmed) == 1  # noqa: SLF001
+        assert len(b2._suspected) == 1  # noqa: SLF001
+    finally:
+        import os
+        os.unlink(path)
+
+
+def test_json_file_is_readable(bank: AdversarialMemoryBank) -> None:
+    import json
+    bank.add_threat("readable test", category="confirmed")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+        path = tmp.name
+    try:
+        bank.save_json(path)
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        assert data["version"] == 1
+        assert len(data["confirmed"]) == 1
+        assert data["confirmed"][0]["text"] == "readable test"
+    finally:
+        import os
+        os.unlink(path)
+
+
+def test_load_json_rejects_bad_schema(bank: AdversarialMemoryBank) -> None:
+    import json
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w") as tmp:
+        json.dump({"version": 999}, tmp)
+        path = tmp.name
+    try:
+        with pytest.raises(ValueError, match="unsupported"):
+            bank.load_json(path)
+    finally:
+        import os
+        os.unlink(path)
+
+
+def test_export_threats_without_embeddings(bank: AdversarialMemoryBank) -> None:
+    bank.add_threat("export test", category="confirmed")
+    exported = bank.export_threats(include_embeddings=False)
+    assert len(exported) == 1
+    assert "embedding" not in exported[0]
+    assert exported[0]["text"] == "export test"
+    assert exported[0]["tier"] == "confirmed"
+
+
+def test_export_threats_with_embeddings(bank: AdversarialMemoryBank) -> None:
+    bank.add_threat("embed export", category="confirmed")
+    exported = bank.export_threats(include_embeddings=True)
+    assert len(exported) == 1
+    assert "embedding" in exported[0]
+    assert isinstance(exported[0]["embedding"], list)
+
+
+def test_import_threats(bank: AdversarialMemoryBank) -> None:
+    entries = [
+        {"text": "imported attack 1", "tier": "confirmed", "confidence": 0.9},
+        {"text": "imported attack 2", "tier": "suspected", "confidence": 0.5},
+        {"text": "", "tier": "confirmed"},
+    ]
+    added = bank.import_threats(entries)
+    assert added == 2
+    assert len(bank._confirmed) == 1  # noqa: SLF001
+    assert len(bank._suspected) == 1  # noqa: SLF001
+
+
+def test_export_import_roundtrip(bank: AdversarialMemoryBank) -> None:
+    bank.add_threat("roundtrip 1", category="confirmed", confidence=0.9)
+    bank.add_threat("roundtrip 2", category="suspected", confidence=0.6)
+    exported = bank.export_threats(include_embeddings=False)
+
+    emb = TextEmbedder(model_name="hash-fallback")
+    b2 = AdversarialMemoryBank(embedder=emb, max_entries=100)
+    added = b2.import_threats(exported)
+    assert added == 2

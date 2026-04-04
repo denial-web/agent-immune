@@ -25,6 +25,18 @@ All detection thresholds are configurable via a frozen Pydantic model:
 
 All core methods (`assess`, `assess_output`, `learn`, `train_from_corpus`) have `*_async` variants that wrap CPU-bound work in `asyncio.to_thread()`, keeping the event loop responsive in async agent frameworks.
 
+## Persistence
+
+- **JSON** (default) — `save_json()` / `load_json()` on `AdversarialMemoryBank`; exposed as `immune.save(path)` / `immune.load(path)`. Human-readable, no pickle deserialization risks.
+- **Pickle** (legacy) — `save(path, format="pickle")` / `load(path, format="pickle")`. Supports optional HMAC-SHA256 signing for tamper detection.
+- **Threat export/import** — `export_threats()` returns portable dicts (optionally with embeddings); `import_threats()` ingests them and re-embeds text that lacks vectors. Enables cross-instance threat intelligence sharing.
+
+## Observability
+
+- **MetricsCollector** (`observability.py`) — thread-safe in-process counters: assessment totals, block/review/allow breakdown, output scan counts, learn events, latency (avg + max). Attach via `AdaptiveImmuneSystem(metrics=collector)`.
+- **Structured events** — `emit_event()` writes JSON payloads to the `agent_immune.events` logger. Each `assess()` and `assess_output()` call emits an event with action, scores, session_id, and latency.
+- **JSON logging** — `configure_json_logging()` sets up a stderr JSON formatter on the `agent_immune` logger hierarchy.
+
 ## Adapters
 
 - **AGT** (`adapters/agt.py`) — `ImmunePolicyEvaluator` and `ImmuneIntegration` with `pre_execute` / `post_execute` semantics aligned with Microsoft Agent OS patterns.
