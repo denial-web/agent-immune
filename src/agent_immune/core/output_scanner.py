@@ -124,9 +124,7 @@ class OutputScanner:
             findings.append("long_url_query")
             score = min(1.0, score + 0.2)
 
-        volume_anomaly = False
         if len(_JSON_ARRAY_ITEMS.findall(t)) > 50 or t.count("\n") > 200 and t.count(",") > 300:
-            volume_anomaly = True
             findings.append("volume_anomaly")
             score = min(1.0, score + 0.15)
 

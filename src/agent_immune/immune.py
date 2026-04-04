@@ -9,7 +9,7 @@ from typing import List, Optional
 
 from agent_immune.core.accumulator import SessionAccumulatorRegistry
 from agent_immune.core.decomposer import InputDecomposer
-from agent_immune.core.models import NormalizationResult, OutputScanResult, ThreatAssessment
+from agent_immune.core.models import OutputScanResult, ThreatAssessment
 from agent_immune.core.normalizer import InputNormalizer
 from agent_immune.core.output_scanner import OutputScanner
 from agent_immune.core.scorer import ThreatScorer
