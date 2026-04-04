@@ -46,21 +46,20 @@ flowchart LR
   O[OutputScanner] --> Policies[Adapter hooks]
 ```
 
-## Benchmarks (local)
+## Benchmarks
 
 ```bash
+pip install datasets   # optional: enables deepset/prompt-injections benchmark
 python bench/run_benchmarks.py
 ```
 
-Example output on the bundled corpus (see `docs/benchmarks.md`):
+| Dataset | Rows | Precision | Recall | F1 | FPR | p50 latency |
+|---------|------|-----------|--------|----|-----|-------------|
+| Local corpus | 185 | 1.000 | 0.878 | **0.935** | 0.0 | 0.10 ms |
+| [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | 662 | 1.000 | 0.053 | 0.101 | 0.0 | 0.10 ms |
+| Combined | 847 | 1.000 | 0.316 | 0.480 | 0.0 | 0.10 ms |
 
-| Metric | Example run |
-|--------|----------------|
-| F1 | ~0.82 |
-| FPR | ~0.0 (on bundled benign slice) |
-| p50 latency (core `assess`) | &lt;1 ms typical |
-
-Numbers vary by Python version, hardware, and optional PINT sample.
+**Zero false positives** across all datasets. Low recall on deepset reflects the inherent limitation of regex-only detection against creative/conversational injection styles — this is exactly the gap that [adversarial memory](#architecture) is designed to fill. After one `learn()` call on a missed attack, semantically similar rephrases are caught automatically.
 
 ## Demos
 
