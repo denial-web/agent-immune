@@ -2,7 +2,7 @@
 
 ## In scope (v0.1)
 
-- Prompt-injection and role-manipulation phrasing (regex + normalization).
+- Prompt-injection and role-manipulation phrasing (multilingual regex — English, German, Spanish, French, Croatian, Russian — plus normalization).
 - Exfiltration-style instructions (email, external forwarding, dataset relay language).
 - Credential and secret solicitation patterns; inline `password=` style literals in mixed-language text.
 - Obfuscation that normalizes to the above (homoglyphs, spacing, fullwidth, some base64-wrapped payloads).
@@ -20,4 +20,5 @@
 
 - Scores are heuristics; tune thresholds per product and locale.
 - Semantic memory quality depends on the embedding model and attack diversity in the bank.
+- `AdversarialMemoryBank` and `TextEmbedder` use `threading.Lock` for thread safety when sharing instances across threads. Async callers should run `assess` in a thread pool (`asyncio.to_thread`) to avoid blocking the event loop during embedding.
 - Competitor benchmarks (e.g. full PINT) require optional `datasets` and are not identical to production traffic.
