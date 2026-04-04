@@ -42,7 +42,15 @@ class InputDecomposer:
             (
                 "injection_ignore",
                 re.compile(
-                    r"(ignore|forget|discard|drop|skip)\s+(all\s+)?(the\s+)?(previous|prior|above|earlier|system|preceding|foregoing)\s+(instructions?|rules?|prompts?|constraints?|tasks?|directions?|assignments?|orders?|guidelines?|information)",
+                    r"(ignore|forget|discard|drop|skip)\s+(?:all|the|your|my|every|any|previous|prior|above|earlier|system|preceding|foregoing)\s+.{0,30}?(instructions?|rules?|prompts?|constraints?|tasks?|directions?|assignments?|orders?|guidelines?|information)",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_forget_everything",
+                re.compile(
+                    r"\b(forget|ignore)\s+everything\b",
                     re.I,
                 ),
                 "high",
@@ -109,8 +117,11 @@ class InputDecomposer:
             ),
             (
                 "injection_from_now",
-                re.compile(r"from\s+now\s+on\s+you\s+will", re.I),
-                "medium",
+                re.compile(
+                    r"from\s+now\s+on,?\s+(you\s+(are|will|must|should|shall)|known\s+as|called)\b",
+                    re.I,
+                ),
+                "high",
             ),
             (
                 "injection_disregard",
@@ -123,7 +134,7 @@ class InputDecomposer:
                     r"(pretend|act)\s+(to\s+be|as|like|you\s+are)\s+.{0,50}(hacker|unrestricted|no\s+ethical|evil|malicious)",
                     re.I,
                 ),
-                "medium",
+                "high",
             ),
             (
                 "injection_task_switch",
@@ -144,7 +155,7 @@ class InputDecomposer:
             (
                 "injection_stop_start",
                 re.compile(
-                    r"(stop|enough|ok(?:ay)?|well\s+done|great|excellent)[\s.,!]+\s*(?:now\s+)?(ignore|forget|new\s+task|new\s+instruction|help\s+me\s+with|focus\s+on|write\s+me)",
+                    r"(stop|enough|ok(?:ay)?|well\s+done|great|excellent)[\s.,!:]+\s*(?:now\s+)?(?:please\s+)?(ignore|forget|new\s+task|new\s+instruction|help\s+me\s+with|focus\s+on|write\b)",
                     re.I,
                 ),
                 "high",
@@ -152,7 +163,97 @@ class InputDecomposer:
             (
                 "injection_output_prompt",
                 re.compile(
-                    r"(show|output|print|display|reveal|write|repeat)\s+(me\s+)?(all\s+)?(your|the)\s+(prompt|system|initial|hidden|secret|internal)\s*(text|message|instruction|prompt)?s?",
+                    r"(show|output|print|display|reveal|write|repeat)\w*\s+(me\s+)?(all\s+)?(your|the|sämtlich\w*|gesamte?n?)\s+(prompt|system|initial|hidden|secret|internal)\s*(text|message|instruction|prompt)?s?",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_de_forget",
+                re.compile(
+                    r"\b(vergiss|vergessen\s+sie)\b.{0,30}\b(alles|alle[snr]?\b|davor|zuvor|vorher|aufgab|auftr|anweisung|instruktion|befehl|gesagt)",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_de_ignore",
+                re.compile(
+                    r"\b(ignoriere\w*|ignorieren\s+sie)\b.{0,40}\b(anweisung|befehl|instruktion|aufgab|auftr|alles|obig|vorherig|bisherig|vorangehend)\w*",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_de_neue_aufgabe",
+                re.compile(
+                    r"\b(nun|jetzt)\b.{0,30}\b(neue?[nrs]?\s+(aufgab|anweisung|instruktion))\w*",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_es_forget",
+                re.compile(
+                    r"\bolvid[ae]\w*\b.{0,30}\b(todo|todas?\s+las?\s+instrucciones)",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_fr_forget",
+                re.compile(
+                    r"\boubliez\b.{0,30}\b(tout|toutes?\s+les?\s+instructions?)",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_hr_forget",
+                re.compile(
+                    r"\bzaboravi\w*\b.{0,20}\b(sve|instrukcije)\b",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_ru_forget",
+                re.compile(r"забудьте\s+все", re.I),
+                "high",
+            ),
+            (
+                "injection_act_as_system",
+                re.compile(
+                    r"\bact\s+as\s+(?:an?\s+)?(?:python|linux|bash|shell|sql|terminal|interpreter|compiler|command[- ]?line)\b",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_repeat_after_me",
+                re.compile(r"\brepeat\s+after\s+me\b", re.I),
+                "high",
+            ),
+            (
+                "injection_change_instructions",
+                re.compile(
+                    r"\b(change|modify|replace|update|override)\s+(?:your|the|my)\s+(instructions?|rules?|guidelines?|programming|behavior)\b",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_print_above",
+                re.compile(
+                    r"(spell[- ]?check|print|reproduce|überprüf\w*)\s+.{0,30}\b(above|obige?n?|vorige?n?)\s*(prompt|text|eingabe|instructions?)",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_abandon_thoughts",
+                re.compile(
+                    r"\b(abandon|discard|erase)\s+(?:all\s+)?(?:your\s+)?(thoughts?|memory|knowledge)\b",
                     re.I,
                 ),
                 "high",

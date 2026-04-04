@@ -57,9 +57,11 @@ python bench/run_benchmarks.py
 
 | Dataset | Rows | Precision | Recall | F1 | FPR | p50 latency |
 |---------|------|-----------|--------|----|-----|-------------|
-| Local corpus | 185 | 1.000 | 0.878 | **0.935** | 0.0 | 0.10 ms |
-| [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | 662 | 1.000 | 0.053 | 0.101 | 0.0 | 0.10 ms |
-| Combined | 847 | 1.000 | 0.316 | 0.480 | 0.0 | 0.10 ms |
+| Local corpus | 185 | 1.000 | 0.902 | **0.949** | 0.0 | 0.12 ms |
+| [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | 662 | 1.000 | 0.342 | 0.510 | 0.0 | 0.12 ms |
+| Combined | 847 | 1.000 | 0.521 | 0.685 | 0.0 | 0.12 ms |
+
+**Zero false positives** across all datasets. Multilingual pattern support covers English, German, Spanish, French, Croatian, and Russian injection styles.
 
 ### With adversarial memory
 
@@ -72,13 +74,13 @@ python bench/run_memory_benchmark.py
 
 | Stage | Learned | Precision | Recall | F1 | FPR | Held-out recall |
 |-------|---------|-----------|--------|----|-----|-----------------|
-| Baseline (regex only) | — | 1.000 | 0.316 | 0.480 | 0.000 | — |
-| + 5% incidents | 13 | 1.000 | 0.347 | 0.515 | 0.000 | 0.327 |
-| + 10% incidents | 26 | 1.000 | 0.389 | 0.560 | 0.000 | 0.344 |
-| + 20% incidents | 52 | 0.994 | 0.461 | 0.630 | 0.002 | 0.380 |
-| + 50% incidents | 132 | 0.988 | 0.661 | **0.792** | 0.006 | **0.524** |
+| Baseline (regex only) | — | 1.000 | 0.521 | 0.685 | 0.000 | — |
+| + 5% incidents | 9 | 1.000 | 0.547 | 0.707 | 0.000 | 0.536 |
+| + 10% incidents | 18 | 1.000 | 0.567 | 0.724 | 0.000 | 0.549 |
+| + 20% incidents | 37 | 0.996 | 0.617 | 0.762 | 0.002 | 0.590 |
+| + 50% incidents | 92 | 1.000 | 0.762 | **0.865** | 0.000 | **0.701** |
 
-**F1 improves from 0.48 → 0.79 (+65%)** with 132 learned attacks. Held-out recall shows that 52.4% of *never-seen* attacks are caught purely through semantic similarity — attacks the system never trained on. Precision stays above 98.8% throughout.
+**F1 improves from 0.685 → 0.865 (+26%)** with 92 learned attacks. Held-out recall shows that 70.1% of *never-seen* attacks are caught purely through semantic similarity — attacks the system never trained on. Precision stays at 100% throughout.
 
 ## Demos
 
