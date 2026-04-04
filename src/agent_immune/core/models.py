@@ -50,8 +50,16 @@ class DecompositionResult(BaseModel):
     language_mixing_score: float = Field(ge=0.0, le=1.0)
     khmer_ratio: float = Field(ge=0.0, le=1.0)
     injection_hits: List[PatternHit] = Field(default_factory=list)
+    exfiltration_hits: List[PatternHit] = Field(default_factory=list)
+    secret_hits: List[PatternHit] = Field(default_factory=list)
+    escalation_hits: List[PatternHit] = Field(default_factory=list)
     delimiter_hits: List[PatternHit] = Field(default_factory=list)
     payload_spans: List[Tuple[int, int]] = Field(default_factory=list)
+
+    @property
+    def all_hits(self) -> List[PatternHit]:
+        """All pattern hits across categories."""
+        return self.injection_hits + self.exfiltration_hits + self.secret_hits + self.escalation_hits + self.delimiter_hits
 
 
 class OutputScanResult(BaseModel):

@@ -135,12 +135,19 @@ class ThreatAccumulator:
 
 
 class SessionAccumulatorRegistry:
-    """Registry of ThreatAccumulator instances keyed by session_id."""
+    """Registry of ThreatAccumulator instances keyed by session_id with LRU eviction."""
 
-    def __init__(self, decay: float = 0.90, max_turns: int = 20) -> None:
+    def __init__(
+        self,
+        decay: float = 0.90,
+        max_turns: int = 20,
+        max_sessions: int = 10000,
+    ) -> None:
         self._decay = decay
         self._max_turns = max_turns
+        self._max_sessions = max_sessions
         self._by_session: Dict[str, ThreatAccumulator] = {}
+        self._access_order: Deque[str] = deque()
         self._lock = threading.Lock()
 
     def get(self, session_id: str) -> ThreatAccumulator:
@@ -149,9 +156,27 @@ class SessionAccumulatorRegistry:
             if acc is None:
                 acc = ThreatAccumulator(decay=self._decay, max_turns=self._max_turns)
                 self._by_session[session_id] = acc
+            self._access_order.append(session_id)
+            self._evict_if_needed()
             return acc
 
     def reset(self, session_id: str) -> None:
         with self._lock:
             if session_id in self._by_session:
                 self._by_session[session_id].reset()
+
+    def evict(self, session_id: str) -> None:
+        """Remove a session entirely, freeing memory."""
+        with self._lock:
+            self._by_session.pop(session_id, None)
+
+    @property
+    def active_sessions(self) -> int:
+        with self._lock:
+            return len(self._by_session)
+
+    def _evict_if_needed(self) -> None:
+        while len(self._by_session) > self._max_sessions and self._access_order:
+            oldest = self._access_order.popleft()
+            if oldest in self._by_session:
+                del self._by_session[oldest]

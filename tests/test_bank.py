@@ -52,3 +52,34 @@ def test_decay_drops_weak(bank: AdversarialMemoryBank) -> None:
     for _ in range(500):
         bank.decay_suspected(0.9)
     assert len(bank._suspected) == 0  # noqa: SLF001
+
+
+def test_save_load_with_hmac(bank: AdversarialMemoryBank) -> None:
+    bank.add_threat("hmac test", category="confirmed")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as tmp:
+        path = tmp.name
+    try:
+        bank.save(path, signing_key="test-secret")
+        emb = TextEmbedder(model_name="hash-fallback")
+        b2 = AdversarialMemoryBank(embedder=emb, max_entries=100)
+        b2.load(path, signing_key="test-secret")
+        sim, _, _ = b2.query_similarity("hmac test")
+        assert sim > 0.99
+    finally:
+        import os
+        os.unlink(path)
+
+
+def test_load_rejects_tampered_hmac(bank: AdversarialMemoryBank) -> None:
+    bank.add_threat("tamper test", category="confirmed")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as tmp:
+        path = tmp.name
+    try:
+        bank.save(path, signing_key="correct-key")
+        emb = TextEmbedder(model_name="hash-fallback")
+        b2 = AdversarialMemoryBank(embedder=emb, max_entries=100)
+        with pytest.raises(ValueError, match="HMAC verification failed"):
+            b2.load(path, signing_key="wrong-key")
+    finally:
+        import os
+        os.unlink(path)

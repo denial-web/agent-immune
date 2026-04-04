@@ -38,7 +38,6 @@ dependencies = [
 [project.optional-dependencies]
 memory = [
     "sentence-transformers>=2.2",
-    "faiss-cpu>=1.7",
 ]
 bench = [
     "datasets>=2.14",
@@ -57,10 +56,11 @@ dev = [
 [project.scripts]
 agent-immune = "agent_immune.__main__:main"
 
+# Update these URLs once the repository is published
 [project.urls]
-Homepage = "https://github.com/denny/agent-immune"
-Documentation = "https://github.com/denny/agent-immune/tree/main/docs"
-Repository = "https://github.com/denny/agent-immune"
+# Homepage = "https://github.com/YOUR_ORG/agent-immune"
+# Documentation = "https://github.com/YOUR_ORG/agent-immune/tree/main/docs"
+# Repository = "https://github.com/YOUR_ORG/agent-immune"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,12 +1,13 @@
 """
 Adversarial memory with confirmed vs suspected tiers, deduplication, and decay.
 
-Uses NumPy cosine similarity for search. Install faiss-cpu for larger-scale deployments
-(FAISS integration planned for v0.2).
+Uses NumPy cosine similarity for search. Thread-safe via threading.Lock.
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import pickle
 import threading
@@ -97,6 +98,16 @@ class AdversarialMemoryBank:
         Raises:
             None.
         """
+        _id, _ = self._add_threat_internal(text, category, confidence)
+        return _id
+
+    def _add_threat_internal(
+        self,
+        text: str,
+        category: str,
+        confidence: float,
+    ) -> tuple[Optional[str], bool]:
+        """Returns (entry_id, is_new)."""
         tier = "confirmed" if category == "confirmed" else "suspected"
         h = text_hash(text)
         vec = self._embedder.encode(text)
@@ -113,7 +124,7 @@ class AdversarialMemoryBank:
                     existing.tier = "confirmed"
                     self._confirmed.append(existing)
                 self._evict_if_needed()
-                return existing.id
+                return existing.id, False
 
             entry = new_entry(text, tier=tier, confidence=confidence, embedding=vec)
             self._by_hash[h] = entry
@@ -122,7 +133,7 @@ class AdversarialMemoryBank:
             else:
                 self._suspected.append(entry)
             self._evict_if_needed()
-            return entry.id
+            return entry.id, True
 
     def query_similarity(self, text: str, k: int = 3) -> Tuple[float, List[str], List[str]]:
         """
@@ -278,12 +289,14 @@ class AdversarialMemoryBank:
         self._suspected = remain
         self._confirmed.extend(promoted)
 
-    def save(self, path: str) -> None:
+    def save(self, path: str, signing_key: Optional[str] = None) -> None:
         """
-        Persist bank state to disk via pickle.
+        Persist bank state to disk via pickle with optional HMAC integrity check.
 
         Args:
             path: File path to write.
+            signing_key: If provided, an HMAC-SHA256 signature is prepended to the file
+                         for tamper detection on load.
 
         Returns:
             None.
@@ -298,24 +311,42 @@ class AdversarialMemoryBank:
                 "confirmed": [e.to_dict() for e in self._confirmed],
                 "suspected": [e.to_dict() for e in self._suspected],
             }
+        data = pickle.dumps(payload)
         with open(path, "wb") as f:
-            pickle.dump(payload, f)
+            if signing_key is not None:
+                sig = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()
+                f.write(sig)
+            f.write(data)
 
-    def load(self, path: str) -> None:
+    def load(self, path: str, signing_key: Optional[str] = None) -> None:
         """
-        Load bank state from pickle.
+        Load bank state from pickle with optional HMAC verification.
 
         Args:
             path: File path to read.
+            signing_key: If provided, verifies the HMAC-SHA256 signature and rejects
+                         tampered files. Must match the key used during save().
 
         Returns:
             None.
 
         Raises:
-            OSError, ValueError: On I/O or schema errors.
+            OSError: On I/O errors.
+            ValueError: On schema mismatch or HMAC verification failure.
         """
         with open(path, "rb") as f:
-            payload = pickle.load(f)
+            raw = f.read()
+        if signing_key is not None:
+            if len(raw) < 32:
+                raise ValueError("file too short: missing HMAC signature")
+            sig, data = raw[:32], raw[32:]
+            expected = hmac.new(signing_key.encode(), data, hashlib.sha256).digest()
+            if not hmac.compare_digest(sig, expected):
+                raise ValueError("HMAC verification failed: file may be tampered")
+        else:
+            data = raw
+            logger.warning("loading bank without HMAC verification; use signing_key for tamper detection")
+        payload = pickle.loads(data)  # noqa: S301
         if not isinstance(payload, dict) or payload.get("version") != _SCHEMA_VERSION:
             raise ValueError("unsupported bank snapshot schema")
         with self._lock:

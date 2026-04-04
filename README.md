@@ -8,7 +8,7 @@ Adaptive threat intelligence for AI agent security: **semantic memory**, **multi
 
 ```bash
 pip install -e ".[dev]"          # core + tests
-pip install -e ".[memory,dev]"   # + sentence-transformers + faiss-cpu
+pip install -e ".[memory,dev]"   # + sentence-transformers
 ```
 
 Python **3.9+** required; 3.11+ recommended for CI.
@@ -24,7 +24,7 @@ if a.action == ThreatAction.BLOCK:
     ...
 ```
 
-## Killer comparison (conceptual)
+## Conceptual comparison
 
 | Attack | Rule-only (typical) | + agent-immune memory |
 |--------|---------------------|-------------------------|
@@ -61,7 +61,9 @@ python bench/run_benchmarks.py
 | [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | 662 | 1.000 | 0.342 | 0.510 | 0.0 | 0.12 ms |
 | Combined | 847 | 1.000 | 0.521 | 0.685 | 0.0 | 0.12 ms |
 
-**Zero false positives** across all datasets. Multilingual pattern support covers English, German, Spanish, French, Croatian, and Russian injection styles.
+Zero false positives on the regex-only baseline across all datasets. Multilingual pattern support covers English, German, Spanish, French, Croatian, and Russian injection styles.
+
+> A prediction is "flagged" when `action ∈ {SANITIZE, REVIEW, BLOCK}` (anything other than `ALLOW`).
 
 ### With adversarial memory
 
@@ -80,7 +82,9 @@ python bench/run_memory_benchmark.py
 | + 20% incidents | 37 | 0.996 | 0.617 | 0.762 | 0.002 | 0.590 |
 | + 50% incidents | 92 | 1.000 | 0.762 | **0.865** | 0.000 | **0.701** |
 
-**F1 improves from 0.685 → 0.865 (+26%)** with 92 learned attacks. Held-out recall shows that 70.1% of *never-seen* attacks are caught purely through semantic similarity — attacks the system never trained on. Precision stays at 100% throughout.
+**F1 improves from 0.685 → 0.865 (+26%)** with 92 learned attacks. Held-out recall shows that 70.1% of *never-seen* attacks are caught purely through semantic similarity — attacks the system never trained on. Precision stays ≥ 99.6% throughout (one false positive at the 20% tier).
+
+> **Methodology note:** a prediction counts as "flagged" when `action ∈ {SANITIZE, REVIEW, BLOCK}` — i.e. anything other than `ALLOW`. Held-out recall excludes the training slice. Seed = 42; results may vary slightly with different seeds or embedding model versions.
 
 ## Demos
 

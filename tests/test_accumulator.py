@@ -1,10 +1,10 @@
-"""Tests for ThreatAccumulator."""
+"""Tests for ThreatAccumulator and SessionAccumulatorRegistry."""
 
 from __future__ import annotations
 
 import threading
 
-from agent_immune.core.accumulator import ThreatAccumulator
+from agent_immune.core.accumulator import SessionAccumulatorRegistry, ThreatAccumulator
 
 
 def test_ema_moves_with_inputs() -> None:
@@ -60,3 +60,22 @@ def test_history_score_tracks_max() -> None:
     acc.update(0.8)
     acc.update(0.1)
     assert acc.history_score >= 0.8 * 0.6
+
+
+def test_registry_lru_eviction() -> None:
+    reg = SessionAccumulatorRegistry(max_sessions=3)
+    reg.get("a").update(0.1)
+    reg.get("b").update(0.2)
+    reg.get("c").update(0.3)
+    assert reg.active_sessions == 3
+    reg.get("d").update(0.4)
+    assert reg.active_sessions <= 3
+    assert reg.get("d").ema > 0
+
+
+def test_registry_evict_explicit() -> None:
+    reg = SessionAccumulatorRegistry()
+    reg.get("x").update(0.5)
+    assert reg.active_sessions == 1
+    reg.evict("x")
+    assert reg.active_sessions == 0

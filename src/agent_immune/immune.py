@@ -5,7 +5,9 @@ AdaptiveImmuneSystem orchestrates normalization, decomposition, memory, trajecto
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional, Protocol, runtime_checkable
+
+import numpy as np
 
 from agent_immune.core.accumulator import SessionAccumulatorRegistry
 from agent_immune.core.decomposer import InputDecomposer
@@ -14,7 +16,17 @@ from agent_immune.core.normalizer import InputNormalizer
 from agent_immune.core.output_scanner import OutputScanner
 from agent_immune.core.scorer import ThreatScorer
 
+if TYPE_CHECKING:
+    from agent_immune.memory.bank import AdversarialMemoryBank
+
 logger = logging.getLogger("agent_immune.immune")
+
+
+@runtime_checkable
+class Embedder(Protocol):
+    """Protocol for text embedding backends."""
+
+    def encode(self, text: str) -> np.ndarray: ...
 
 
 class AdaptiveImmuneSystem:
@@ -29,14 +41,14 @@ class AdaptiveImmuneSystem:
 
     def __init__(
         self,
-        embedder: Optional[object] = None,
-        bank: Optional[object] = None,
+        embedder: Optional[Embedder] = None,
+        bank: Optional[AdversarialMemoryBank] = None,
     ) -> None:
         """
         Create orchestrator.
 
         Args:
-            embedder: Optional TextEmbedder; if None, memory features are disabled.
+            embedder: Optional Embedder (e.g. TextEmbedder); if None, memory features are disabled.
             bank: Optional AdversarialMemoryBank; if None but embedder set, a new bank is created.
 
         Returns:
@@ -55,7 +67,7 @@ class AdaptiveImmuneSystem:
         if embedder is not None and bank is None:
             from agent_immune.memory.bank import AdversarialMemoryBank
 
-            self._bank = AdversarialMemoryBank(embedder)  # type: ignore[arg-type]
+            self._bank = AdversarialMemoryBank(embedder)
         self._cycles = 0
 
     def assess(self, text: str, session_id: str = "default") -> ThreatAssessment:
@@ -102,7 +114,7 @@ class AdaptiveImmuneSystem:
             trajectory_score=min(1.0, trajectory_score),
             normalization_suspicion=float(norm.suspicion_from_normalization),
             is_escalating=is_esc,
-            pattern_hits=len(decomp.injection_hits) + len(decomp.delimiter_hits),
+            pattern_hits=len(decomp.all_hits),
             memory_matches=memory_matches,
             max_memory_similarity=max(max_mem, max_confirmed),
             confirmed_memory_hit=confirmed_hit,
@@ -194,7 +206,7 @@ class AdaptiveImmuneSystem:
             confidence: Confidence score applied to each entry.
 
         Returns:
-            Number of entries actually stored (deduplicated).
+            Number of new entries stored (duplicates are updated, not counted).
         """
         if self._bank is None:
             from agent_immune.memory.embedder import TextEmbedder
@@ -202,16 +214,16 @@ class AdaptiveImmuneSystem:
 
             self._embedder = TextEmbedder()
             self._bank = AdversarialMemoryBank(self._embedder)
-        stored = 0
+        new_count = 0
         for text in attacks:
             text = text.strip()
             if not text:
                 continue
-            entry_id = self._bank.add_threat(text, category=category, confidence=confidence)
-            if entry_id is not None:
-                stored += 1
-        logger.info("train_from_corpus: stored %d/%d attacks as %s", stored, len(attacks), category)
-        return stored
+            entry_id, is_new = self._bank._add_threat_internal(text, category=category, confidence=confidence)
+            if is_new and entry_id is not None:
+                new_count += 1
+        logger.info("train_from_corpus: %d new entries from %d inputs as %s", new_count, len(attacks), category)
+        return new_count
 
     def decay_memory(self) -> None:
         """

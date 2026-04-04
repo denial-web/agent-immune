@@ -37,7 +37,6 @@ class InputDecomposer:
     """Scan normalized text for threat patterns and produce scores plus redacted clean text."""
 
     def __init__(self) -> None:
-        pass
         self._injection: List[Tuple[str, re.Pattern[str], str]] = [
             (
                 "injection_ignore",
@@ -339,8 +338,13 @@ class InputDecomposer:
         """
         text = norm.normalized
         original = norm.original
-        injection_hits: List[PatternHit] = []
-        delimiter_hits: List[PatternHit] = []
+        hit_buckets: dict[str, List[PatternHit]] = {
+            "injection": [],
+            "exfiltration": [],
+            "secret": [],
+            "escalation": [],
+            "delimiter": [],
+        }
         payload_spans: List[Tuple[int, int]] = []
 
         def scan_group(
@@ -349,6 +353,7 @@ class InputDecomposer:
         ) -> float:
             """Accumulate unbounded hit strength; caller scales by category weight."""
             score_acc = 0.0
+            bucket = hit_buckets[category]
             for idx, (_name, pat, sev) in enumerate(group):
                 for m in pat.finditer(text):
                     start, end = m.span()
@@ -356,18 +361,14 @@ class InputDecomposer:
                     mult = 0.15 if inside else 1.0
                     sev_f = 1.0 if sev == "high" else 0.6
                     score_acc += sev_f * mult
-                    hit = PatternHit(
+                    bucket.append(PatternHit(
                         pattern_idx=idx,
                         span=(start, end),
                         matched_text=m.group(0)[:200],
                         severity=sev,
                         category=category,
                         inside_quoted=inside,
-                    )
-                    if category == "delimiter":
-                        delimiter_hits.append(hit)
-                    else:
-                        injection_hits.append(hit)
+                    ))
                     payload_spans.append((start, end))
             return score_acc
 
@@ -377,6 +378,9 @@ class InputDecomposer:
         esc_hits = scan_group(self._escalation, "escalation")
         _ = scan_group(self._delimiter, "delimiter")
 
+        injection_hits = hit_buckets["injection"]
+        delimiter_hits = hit_buckets["delimiter"]
+
         pattern_linear = min(
             1.0,
             min(1.0, inj_hits * 0.22) * self._weight_injection
@@ -385,7 +389,8 @@ class InputDecomposer:
             + min(1.0, esc_hits * 0.35) * self._weight_escalation
             + (min(1.0, len(delimiter_hits) * 0.5) * self._weight_delimiter),
         )
-        hit_boost = min(0.6, 0.18 * (len(injection_hits) + len(delimiter_hits)))
+        total_threat_hits = sum(len(hit_buckets[c]) for c in ("injection", "exfiltration", "secret", "escalation"))
+        hit_boost = min(0.6, 0.18 * (total_threat_hits + len(delimiter_hits)))
 
         khmer_chars = len(_KHMER_RE.findall(text))
         khmer_ratio = khmer_chars / max(1, len(text))
@@ -406,10 +411,13 @@ class InputDecomposer:
             language_mixing_score=language_mixing_score,
             khmer_ratio=khmer_ratio,
             injection_hits=injection_hits,
+            exfiltration_hits=hit_buckets["exfiltration"],
+            secret_hits=hit_buckets["secret"],
+            escalation_hits=hit_buckets["escalation"],
             delimiter_hits=delimiter_hits,
             payload_spans=merged_spans,
         )
-        logger.debug("decompose score=%s hits=%s", injection_score, len(injection_hits))
+        logger.debug("decompose score=%s hits=%s", injection_score, total_threat_hits)
         return result
 
     def _merge_spans(self, spans: List[Tuple[int, int]], text_len: int) -> List[Tuple[int, int]]:
