@@ -82,11 +82,11 @@ class AdaptiveImmuneSystem:
         max_confirmed = 0.0
         if self._bank is not None:
             max_sim, snippets, _ = self._bank.query_similarity(norm.normalized, k=3)
-            memory_score = float(max_sim)
-            max_mem = float(max_sim)
+            memory_score = min(1.0, float(max_sim))
+            max_mem = memory_score
             memory_matches = snippets
             mc, _ms = self._bank.max_similarity_by_tier(norm.normalized)
-            max_confirmed = float(mc)
+            max_confirmed = min(1.0, float(mc))
             if max_sim >= 0.75:
                 self._bank.record_query_match(norm.normalized, threshold=0.75)
 
@@ -174,6 +174,44 @@ class AdaptiveImmuneSystem:
             logger.warning("learn called without memory bank")
             return None
         return self._bank.add_threat(text, category=category, confidence=confidence)
+
+    def train_from_corpus(
+        self,
+        attacks: list[str],
+        category: str = "confirmed",
+        confidence: float = 0.90,
+    ) -> int:
+        """
+        Bulk-load a list of known attack strings into adversarial memory.
+
+        This bootstraps the memory bank from a labeled dataset, public corpus,
+        or incident log so that semantically similar future attacks are caught
+        even when regex patterns miss them.
+
+        Args:
+            attacks: List of attack text strings to memorize.
+            category: "confirmed" or "suspected" tier for all entries.
+            confidence: Confidence score applied to each entry.
+
+        Returns:
+            Number of entries actually stored (deduplicated).
+        """
+        if self._bank is None:
+            from agent_immune.memory.embedder import TextEmbedder
+            from agent_immune.memory.bank import AdversarialMemoryBank
+
+            self._embedder = TextEmbedder()
+            self._bank = AdversarialMemoryBank(self._embedder)
+        stored = 0
+        for text in attacks:
+            text = text.strip()
+            if not text:
+                continue
+            entry_id = self._bank.add_threat(text, category=category, confidence=confidence)
+            if entry_id is not None:
+                stored += 1
+        logger.info("train_from_corpus: stored %d/%d attacks as %s", stored, len(attacks), category)
+        return stored
 
     def decay_memory(self) -> None:
         """

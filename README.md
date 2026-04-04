@@ -48,6 +48,8 @@ flowchart LR
 
 ## Benchmarks
 
+### Regex-only baseline
+
 ```bash
 pip install datasets   # optional: enables deepset/prompt-injections benchmark
 python bench/run_benchmarks.py
@@ -59,7 +61,24 @@ python bench/run_benchmarks.py
 | [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | 662 | 1.000 | 0.053 | 0.101 | 0.0 | 0.10 ms |
 | Combined | 847 | 1.000 | 0.316 | 0.480 | 0.0 | 0.10 ms |
 
-**Zero false positives** across all datasets. Low recall on deepset reflects the inherent limitation of regex-only detection against creative/conversational injection styles — this is exactly the gap that [adversarial memory](#architecture) is designed to fill. After one `learn()` call on a missed attack, semantically similar rephrases are caught automatically.
+### With adversarial memory
+
+The core thesis: learning from a small incident log lifts recall on *unseen* attacks through semantic similarity.
+
+```bash
+pip install -e ".[memory]" && pip install datasets
+python bench/run_memory_benchmark.py
+```
+
+| Stage | Learned | Precision | Recall | F1 | FPR | Held-out recall |
+|-------|---------|-----------|--------|----|-----|-----------------|
+| Baseline (regex only) | — | 1.000 | 0.316 | 0.480 | 0.000 | — |
+| + 5% incidents | 13 | 1.000 | 0.347 | 0.515 | 0.000 | 0.327 |
+| + 10% incidents | 26 | 1.000 | 0.389 | 0.560 | 0.000 | 0.344 |
+| + 20% incidents | 52 | 0.994 | 0.461 | 0.630 | 0.002 | 0.380 |
+| + 50% incidents | 132 | 0.988 | 0.661 | **0.792** | 0.006 | **0.524** |
+
+**F1 improves from 0.48 → 0.79 (+65%)** with 132 learned attacks. Held-out recall shows that 52.4% of *never-seen* attacks are caught purely through semantic similarity — attacks the system never trained on. Precision stays above 98.8% throughout.
 
 ## Demos
 

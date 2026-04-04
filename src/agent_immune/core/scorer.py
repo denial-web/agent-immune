@@ -89,11 +89,12 @@ class ThreatScorer:
             + escalation_signal * 0.08
             + min(1.0, history_score) * 0.08
         )
-        # When memory is cold, strong pattern scores must still elevate the aggregate threat.
-        if memory_score < 0.05 and pattern_score >= 0.25:
+        # Pattern-based floor: patterns alone are always sufficient to flag threats.
+        # Memory is purely additive lift — it never reduces what patterns would have caught.
+        if pattern_score >= 0.25:
             pattern_floor = min(1.0, 0.28 + 0.62 * pattern_score)
         else:
-            pattern_floor = 0.72 * pattern_score
+            pattern_floor = 0.0
         threat_score = min(1.0, max(raw, pattern_floor))
 
         action = self._to_action(threat_score)
