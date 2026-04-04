@@ -24,7 +24,11 @@ from agent_immune import AdaptiveImmuneSystem, ThreatAction
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agent_immune.bench")
 
-from bench.dataset_loader import load_local_corpus, try_load_pint_sample  # noqa: E402
+from bench.dataset_loader import (  # noqa: E402
+    load_local_corpus,
+    try_load_deepset,
+    try_load_pint_sample,
+)
 
 
 def _predict_malicious(immune: AdaptiveImmuneSystem, text: str) -> bool:
@@ -32,14 +36,7 @@ def _predict_malicious(immune: AdaptiveImmuneSystem, text: str) -> bool:
     return a.action in (ThreatAction.BLOCK, ThreatAction.REVIEW, ThreatAction.SANITIZE)
 
 
-def main() -> None:
-    immune = AdaptiveImmuneSystem()
-    rows = load_local_corpus()
-    pint = try_load_pint_sample(max_rows=300)
-    if pint:
-        rows = pint + rows
-        logger.info("combined PINT sample + local: %s rows", len(rows))
-
+def _run_eval(name: str, immune: AdaptiveImmuneSystem, rows: list) -> dict:
     tp = fp = tn = fn = 0
     latencies: list[float] = []
     for row in rows:
@@ -60,19 +57,45 @@ def main() -> None:
     f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
     fpr = fp / (fp + tn) if (fp + tn) else 0.0
 
-    out = {
+    return {
+        "dataset": name,
         "rows": len(rows),
+        "tp": tp,
+        "fp": fp,
+        "tn": tn,
+        "fn": fn,
         "precision": round(prec, 4),
         "recall": round(rec, 4),
         "f1": round(f1, 4),
         "fpr": round(fpr, 4),
-        "latency_p50_ms": round(statistics.median(latencies) * 1000, 3),
+        "latency_p50_ms": round(statistics.median(latencies) * 1000, 3) if latencies else 0,
     }
-    print(json.dumps(out, indent=2))
+
+
+def main() -> None:
+    immune = AdaptiveImmuneSystem()
+    results = []
+
+    local = load_local_corpus()
+    results.append(_run_eval("local_corpus", immune, local))
+
+    deepset = try_load_deepset()
+    if deepset:
+        results.append(_run_eval("deepset/prompt-injections", immune, deepset))
+
+    pint = try_load_pint_sample(max_rows=300)
+    if pint:
+        results.append(_run_eval("lakera/pint-benchmark", immune, pint))
+
+    all_rows = local + (deepset or []) + (pint or [])
+    if len(all_rows) > len(local):
+        results.append(_run_eval("combined", immune, all_rows))
+
+    print(json.dumps(results, indent=2))
 
     results_dir = Path(__file__).parent / "results"
     results_dir.mkdir(exist_ok=True)
-    (results_dir / "last_run.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
+    (results_dir / "last_run.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

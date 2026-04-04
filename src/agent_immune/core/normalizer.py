@@ -102,8 +102,8 @@ def _strip_markdown_fences(text: str) -> str:
     return text
 
 
-_LEET_MAP = str.maketrans({"@": "a", "$": "s", "3": "e", "0": "o", "1": "i", "7": "t", "5": "s"})
-_LEET_DIGIT_CHARS = frozenset("30175")
+_LEET_MAP = str.maketrans({"@": "a", "$": "s", "3": "e", "0": "o", "1": "i", "7": "t", "5": "s", "4": "a"})
+_LEET_DIGIT_CHARS = frozenset("301754")
 _LETTER_RE = re.compile(r"[a-zA-Z]")
 
 
@@ -166,7 +166,7 @@ def _try_decode_base64_segments(text: str) -> tuple[str, bool]:
     return new_bytes.decode("utf-8", errors="replace"), changed
 
 
-_ROT13_TRIGGER = re.compile(r"\b(rot13|ROT13|decode\s+this)\b", re.I)
+_ROT13_TRIGGER = re.compile(r"\b(rot13|ROT13)\b", re.I)
 
 
 def _rot13_context(text: str) -> tuple[str, bool]:
@@ -185,12 +185,12 @@ def _rot13_context(text: str) -> tuple[str, bool]:
     def rot_block(m: re.Match[str]) -> str:
         nonlocal changed
         inner = m.group(1)
-        if len(inner) < 8:
+        if len(inner) < 4:
             return m.group(0)
         changed = True
         return _rot13(inner)
 
-    transformed = re.sub(r"([A-Za-z]{8,})", rot_block, window)
+    transformed = re.sub(r"([A-Za-z]{4,})", rot_block, window)
     return prefix + transformed + suffix, changed
 
 
@@ -242,16 +242,6 @@ class InputNormalizer:
             transforms.append("markdown_fence_strip")
             current = step
 
-        step = _leetspeak_normalize(current)
-        if step != current:
-            transforms.append("leetspeak_normalize")
-            current = step
-
-        step = _collapse_spaced_letters(current)
-        if step != current:
-            transforms.append("spaced_letter_collapse")
-            current = step
-
         step, b64_changed = _try_decode_base64_segments(current)
         if b64_changed:
             transforms.append("base64_decode_threat")
@@ -260,6 +250,16 @@ class InputNormalizer:
         step, rot_changed = _rot13_context(current)
         if rot_changed:
             transforms.append("rot13_context")
+            current = step
+
+        step = _leetspeak_normalize(current)
+        if step != current:
+            transforms.append("leetspeak_normalize")
+            current = step
+
+        step = _collapse_spaced_letters(current)
+        if step != current:
+            transforms.append("spaced_letter_collapse")
             current = step
 
         suspicion = 0.0

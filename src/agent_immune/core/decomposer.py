@@ -42,7 +42,7 @@ class InputDecomposer:
             (
                 "injection_ignore",
                 re.compile(
-                    r"ignore\s+(all\s+)?(previous|prior|above|earlier|system)\s+(instructions?|rules?|prompts?|constraints?)",
+                    r"(ignore|forget|discard|drop|skip)\s+(all\s+)?(the\s+)?(previous|prior|above|earlier|system|preceding|foregoing)\s+(instructions?|rules?|prompts?|constraints?|tasks?|directions?|assignments?|orders?|guidelines?|information)",
                     re.I,
                 ),
                 "high",
@@ -114,7 +114,7 @@ class InputDecomposer:
             ),
             (
                 "injection_disregard",
-                re.compile(r"disregard\s+(everything\s+)?(above|prior|previous)", re.I),
+                re.compile(r"disregard\s+(everything\s+)?(above|prior|previous|before)", re.I),
                 "high",
             ),
             (
@@ -124,6 +124,38 @@ class InputDecomposer:
                     re.I,
                 ),
                 "medium",
+            ),
+            (
+                "injection_task_switch",
+                re.compile(
+                    r"(forget|ignore)\s+(about\s+)?(all\s+)?(the\s+)?(previous|prior|above|earlier|preceding)?\s*(tasks?|assignments?|work|information|context)",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_new_task",
+                re.compile(
+                    r"(now\s+)?(focus|concentrate|work)\s+on\s+(your\s+)?(new|next|following|this)\s+(task|assignment|instruction|objective)",
+                    re.I,
+                ),
+                "medium",
+            ),
+            (
+                "injection_stop_start",
+                re.compile(
+                    r"(stop|enough|ok(?:ay)?|well\s+done|great|excellent)[\s.,!]+\s*(?:now\s+)?(ignore|forget|new\s+task|new\s+instruction|help\s+me\s+with|focus\s+on|write\s+me)",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_output_prompt",
+                re.compile(
+                    r"(show|output|print|display|reveal|write|repeat)\s+(me\s+)?(all\s+)?(your|the)\s+(prompt|system|initial|hidden|secret|internal)\s*(text|message|instruction|prompt)?s?",
+                    re.I,
+                ),
+                "high",
             ),
         ]
         self._exfiltration: List[Tuple[str, re.Pattern[str], str]] = [

@@ -100,6 +100,41 @@ def try_load_pint_sample(max_rows: int = 500) -> Optional[List[LabeledRow]]:
     return rows
 
 
+def try_load_deepset(max_rows: int = 700) -> Optional[List[LabeledRow]]:
+    """
+    Load the deepset/prompt-injections dataset from HuggingFace.
+
+    Args:
+        max_rows: Cap rows per split.
+
+    Returns:
+        Rows or None if datasets unavailable.
+    """
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        logger.warning("datasets not installed; skipping deepset")
+        return None
+    try:
+        ds = load_dataset("deepset/prompt-injections")
+    except Exception as exc:
+        logger.warning("deepset load failed: %s", exc)
+        return None
+    rows: List[LabeledRow] = []
+    for split_name in ("train", "test"):
+        split = ds.get(split_name)
+        if split is None:
+            continue
+        for i, item in enumerate(split):
+            if i >= max_rows:
+                break
+            text = str(item.get("text", ""))
+            label = int(item.get("label", 0))
+            rows.append(LabeledRow(text=text, label=label))
+    logger.info("loaded %s deepset/prompt-injections rows", len(rows))
+    return rows
+
+
 def iter_all_sources() -> Iterator[LabeledRow]:
     """Yield rows from PINT sample if available, else local corpus only."""
     pint = try_load_pint_sample()
