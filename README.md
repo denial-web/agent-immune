@@ -1,6 +1,6 @@
 # agent-immune
 
-[![CI](https://github.com/YOUR_ORG/agent-immune/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_ORG/agent-immune/actions)
+[![CI](https://github.com/denial-web/agent-immune/actions/workflows/ci.yml/badge.svg)](https://github.com/denial-web/agent-immune/actions)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://python.org)
 [![Coverage 94%](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](tests/)
 [![License Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)

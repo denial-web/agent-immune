@@ -60,10 +60,10 @@ dev = [
 agent-immune = "agent_immune.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/YOUR_ORG/agent-immune"
-Documentation = "https://github.com/YOUR_ORG/agent-immune/tree/main/docs"
-Repository = "https://github.com/YOUR_ORG/agent-immune"
-Changelog = "https://github.com/YOUR_ORG/agent-immune/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/denial-web/agent-immune"
+Documentation = "https://github.com/denial-web/agent-immune/tree/main/docs"
+Repository = "https://github.com/denial-web/agent-immune"
+Changelog = "https://github.com/denial-web/agent-immune/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
