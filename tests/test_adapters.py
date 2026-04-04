@@ -97,3 +97,58 @@ def test_langchain_callback_assesses_injection() -> None:
     )
     assert r.action in (ThreatAction.BLOCK, ThreatAction.REVIEW)
     assert r.threat_score >= 0.5
+
+
+def test_agt_integration_empty_context() -> None:
+    """Empty context should pass through without error."""
+    immune = AdaptiveImmuneSystem()
+    hook = ImmuneIntegration(immune)
+    hook.pre_execute({})
+
+
+def test_agt_integration_tool_context() -> None:
+    """Context with tool/params fields should be assessed."""
+    immune = AdaptiveImmuneSystem()
+    hook = ImmuneIntegration(immune)
+    hook.pre_execute({"tool": "echo", "params": "hello world"})
+
+
+def test_agt_post_execute_clean() -> None:
+    """Clean output should not raise."""
+    immune = AdaptiveImmuneSystem()
+    hook = ImmuneIntegration(immune)
+    hook.post_execute({"session_id": "pe"}, {"output": "The answer is 42."})
+
+
+def test_agt_post_execute_blocks_exfiltration() -> None:
+    """Output with credentials should raise."""
+    immune = AdaptiveImmuneSystem()
+    hook = ImmuneIntegration(immune)
+    with pytest.raises((RuntimeError, Exception)):
+        hook.post_execute(
+            {"session_id": "pe2"},
+            {"output": "sk-abcdefghijklmnopqrstuvwxyz1234 and password=hunter2 and SSN: 123-45-6789"},
+        )
+
+
+def test_agt_evaluator_with_fallback() -> None:
+    """Evaluator should call fallback when input is benign."""
+    immune = AdaptiveImmuneSystem()
+    called = []
+
+    def my_fallback(ctx: dict) -> dict:
+        called.append(True)
+        return {"action": "allow", "source": "fallback"}
+
+    ev = ImmunePolicyEvaluator(immune, fallback_evaluate=my_fallback)
+    out = ev.evaluate({"input": "hello world", "session_id": "fb"})
+    assert out["source"] == "fallback"
+    assert len(called) == 1
+
+
+def test_agt_evaluator_content_key() -> None:
+    """Evaluator should extract text from 'content' key."""
+    immune = AdaptiveImmuneSystem()
+    ev = ImmunePolicyEvaluator(immune)
+    out = ev.evaluate({"content": "What is 2+2?", "session_id": "ck"})
+    assert out["action"] == "allow"
