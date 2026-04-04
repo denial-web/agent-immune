@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-immune"
 version = "0.1.0"
-description = "Adaptive threat intelligence for AI agent security. The immune system that governance toolkits don't have."
+description = "Adaptive threat intelligence for AI agent security — semantic memory, multi-turn escalation, output scanning, rate limiting, and prompt hardening."
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.9"
@@ -17,11 +17,14 @@ keywords = [
     "tool-security",
     "mcp",
     "langchain",
+    "llm-security",
+    "agent-governance",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -29,6 +32,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Security",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
 dependencies = [
     "pydantic>=2.0",
@@ -43,7 +47,6 @@ bench = [
     "datasets>=2.14",
     "pandas>=2.0",
 ]
-adapters = []
 all = [
     "agent-immune[memory]",
 ]
@@ -56,14 +59,17 @@ dev = [
 [project.scripts]
 agent-immune = "agent_immune.__main__:main"
 
-# Update these URLs once the repository is published
 [project.urls]
-# Homepage = "https://github.com/YOUR_ORG/agent-immune"
-# Documentation = "https://github.com/YOUR_ORG/agent-immune/tree/main/docs"
-# Repository = "https://github.com/YOUR_ORG/agent-immune"
+Homepage = "https://github.com/YOUR_ORG/agent-immune"
+Documentation = "https://github.com/YOUR_ORG/agent-immune/tree/main/docs"
+Repository = "https://github.com/YOUR_ORG/agent-immune"
+Changelog = "https://github.com/YOUR_ORG/agent-immune/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+agent_immune = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
