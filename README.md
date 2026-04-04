@@ -67,6 +67,29 @@ print(metrics.snapshot())  # counters, latency, block rate
 
 Structured JSON events are emitted to the `agent_immune.events` logger — pipe them to any log aggregator.
 
+### Rate limiting / circuit breaker
+
+```python
+from agent_immune import AdaptiveImmuneSystem, CircuitBreaker
+
+breaker = CircuitBreaker(max_blocks=5, window_s=60, cooldown_s=120)
+immune = AdaptiveImmuneSystem(circuit_breaker=breaker)
+# Sessions that accumulate 5+ blocks in 60s are auto-denied for 2 minutes
+```
+
+### Prompt hardening
+
+```python
+from agent_immune import PromptHardener
+
+hardener = PromptHardener()
+messages = hardener.harden_messages([
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": user_input},
+])
+# System prompt gets role-lock + output guard; user input gets sandboxed
+```
+
 ## Conceptual comparison
 
 | Attack | Rule-only (typical) | + agent-immune memory |

@@ -176,9 +176,9 @@ def test_decomposition_has_bucketed_hits() -> None:
         assert all(c == "injection" for c in inj_cats)
 
 
-def test_hardener_stub_raises() -> None:
-    with pytest.raises(ImportError, match="v0.2"):
-        from agent_immune.hardener import something  # noqa: F401
+def test_hardener_imports_successfully() -> None:
+    from agent_immune.hardener import PromptHardener  # noqa: F401
+    assert PromptHardener is not None
 
 
 # ---------- SecurityPolicy tests ----------

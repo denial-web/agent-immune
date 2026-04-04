@@ -37,6 +37,19 @@ All core methods (`assess`, `assess_output`, `learn`, `train_from_corpus`) have 
 - **Structured events** — `emit_event()` writes JSON payloads to the `agent_immune.events` logger. Each `assess()` and `assess_output()` call emits an event with action, scores, session_id, and latency.
 - **JSON logging** — `configure_json_logging()` sets up a stderr JSON formatter on the `agent_immune` logger hierarchy.
 
+## Rate Limiter / Circuit Breaker
+
+`CircuitBreaker` (`rate_limiter.py`) — per-session circuit breaker. Tracks block events within a sliding time window; once `max_blocks` are exceeded, the circuit opens and `assess()` returns an immediate BLOCK without running the full pipeline. Auto-resets after `cooldown_s`. Thread-safe.
+
+## Prompt Hardening
+
+`PromptHardener` (`hardener/templates.py`) — proactive defense layer that complements detection:
+
+- **System prompt hardening** — appends role-lock, refusal rules, and output self-check instructions.
+- **Input sandboxing** — wraps untrusted user input in clear delimiters so the model treats it as data.
+- **Output guard** — adds a pre-response self-check to discourage system prompt leaks and PII exposure.
+- **Composable** — `harden_messages()` applies all three to a standard `[{role, content}]` message list.
+
 ## Adapters
 
 - **AGT** (`adapters/agt.py`) — `ImmunePolicyEvaluator` and `ImmuneIntegration` with `pre_execute` / `post_execute` semantics aligned with Microsoft Agent OS patterns.

@@ -1,14 +1,22 @@
 """
-Hardener package — DPO contrastive training for agent-immune.
-Planned for v0.2. See docs/roadmap.md.
+Prompt hardening utilities for agent-immune.
+
+Provides system prompt wrapping, input sandboxing, and output framing
+that complement the detection layer with proactive defenses.
 """
 
 from __future__ import annotations
 
-__all__: tuple[str, ...] = ()
+from agent_immune.hardener.templates import (
+    PromptHardener,
+    harden_system_prompt,
+    sandwich_user_input,
+    wrap_output_guard,
+)
 
-
-def __getattr__(name: str) -> object:
-    raise ImportError(
-        "agent-immune[hardener] is not yet available. Coming in v0.2. See docs/roadmap.md."
-    )
+__all__ = [
+    "PromptHardener",
+    "harden_system_prompt",
+    "sandwich_user_input",
+    "wrap_output_guard",
+]

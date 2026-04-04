@@ -13,10 +13,11 @@ import numpy as np
 
 from agent_immune.core.accumulator import SessionAccumulatorRegistry
 from agent_immune.core.decomposer import InputDecomposer
-from agent_immune.core.models import OutputScanResult, SecurityPolicy, ThreatAssessment
+from agent_immune.core.models import OutputScanResult, SecurityPolicy, ThreatAction, ThreatAssessment
 from agent_immune.core.normalizer import InputNormalizer
 from agent_immune.core.output_scanner import OutputScanner
 from agent_immune.core.scorer import ThreatScorer
+from agent_immune.rate_limiter import CircuitBreaker
 
 if TYPE_CHECKING:
     from agent_immune.memory.bank import AdversarialMemoryBank
@@ -47,6 +48,7 @@ class AdaptiveImmuneSystem:
         bank: Optional[AdversarialMemoryBank] = None,
         policy: Optional[SecurityPolicy] = None,
         metrics: Optional[object] = None,
+        circuit_breaker: Optional[CircuitBreaker] = None,
     ) -> None:
         """
         Create orchestrator.
@@ -56,12 +58,7 @@ class AdaptiveImmuneSystem:
             bank: Optional AdversarialMemoryBank; if None but embedder set, a new bank is created.
             policy: Optional SecurityPolicy with tunable thresholds; uses defaults if None.
             metrics: Optional MetricsCollector for observability; if None, no metrics are emitted.
-
-        Returns:
-            None.
-
-        Raises:
-            None.
+            circuit_breaker: Optional CircuitBreaker for rate limiting; if None, no rate limiting.
         """
         self._policy = policy or SecurityPolicy()
         self._normalizer = InputNormalizer()
@@ -72,6 +69,7 @@ class AdaptiveImmuneSystem:
         self._embedder = embedder
         self._bank = bank
         self._metrics = metrics
+        self._breaker = circuit_breaker
         if embedder is not None and bank is None:
             from agent_immune.memory.bank import AdversarialMemoryBank
 
@@ -93,10 +91,19 @@ class AdaptiveImmuneSystem:
 
         Returns:
             ThreatAssessment with scores and recommended action.
-
-        Raises:
-            None.
         """
+        if self._breaker is not None and self._breaker.is_open(session_id):
+            logger.warning("circuit open for session=%s — fast-deny", session_id)
+            return ThreatAssessment(
+                threat_score=1.0,
+                action=ThreatAction.BLOCK,
+                pattern_score=0.0,
+                memory_score=0.0,
+                trajectory_score=1.0,
+                session_id=session_id,
+                feedback=["circuit_breaker: session rate-limited"],
+            )
+
         t0 = _time.monotonic()
         norm = self._normalizer.normalize(text)
         decomp = self._decomposer.decompose(norm)
@@ -143,6 +150,8 @@ class AdaptiveImmuneSystem:
             self.decay_memory()
 
         latency_ms = (_time.monotonic() - t0) * 1000.0
+        if self._breaker is not None and assessment.action == ThreatAction.BLOCK:
+            self._breaker.record_block(session_id)
         if self._metrics is not None:
             self._metrics.record_assessment(assessment, latency_ms=latency_ms)
         logger.debug("assess session=%s action=%s latency=%.1fms", session_id, assessment.action, latency_ms)

@@ -123,6 +123,50 @@ snap = metrics.snapshot()
 
 Every `assess()` and `assess_output()` call emits a structured JSON event to the `agent_immune.events` logger with action, scores, session_id, and latency — pipe it to any log aggregator.
 
+## Rate limiting / circuit breaker
+
+```python
+from agent_immune import AdaptiveImmuneSystem, CircuitBreaker
+
+# Trip after 5 blocks in 60s; deny for 2 minutes
+breaker = CircuitBreaker(max_blocks=5, window_s=60, cooldown_s=120)
+immune = AdaptiveImmuneSystem(circuit_breaker=breaker)
+
+# assess() auto-records blocks and returns instant BLOCK when circuit is open
+result = immune.assess("anything", session_id="abusive-session")
+
+# Manual management
+breaker.force_close("session-id")     # reset manually
+breaker.open_sessions()               # list currently tripped sessions
+breaker.stats                         # snapshot of breaker state
+```
+
+## Prompt hardening
+
+Proactive defenses that complement detection:
+
+```python
+from agent_immune import PromptHardener
+
+# Standalone functions
+from agent_immune.hardener import harden_system_prompt, sandwich_user_input
+
+hardened = harden_system_prompt("You are a helpful assistant.")
+sandboxed = sandwich_user_input(user_text)
+
+# Composable class — applies all three to a message list
+hardener = PromptHardener(custom_rules=["Never discuss competitors"])
+messages = hardener.harden_messages([
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": user_input},
+])
+```
+
+The hardener adds:
+- **Role lock** — prevents the model from adopting new personas or revealing system instructions.
+- **Input sandboxing** — wraps user text in clear delimiters so the model treats it as data.
+- **Output guard** — self-check instructions before responding (no PII, no system prompt leak).
+
 ## Memory (semantic)
 
 ```bash
