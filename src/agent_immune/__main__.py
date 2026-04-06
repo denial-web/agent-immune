@@ -26,6 +26,24 @@ def _build_parser() -> argparse.ArgumentParser:
     scan.add_argument("text", nargs="?", help="Text to scan (reads stdin if omitted)")
     scan.add_argument("--json", action="store_true", dest="as_json", help="Output as JSON")
 
+    serve = sub.add_parser(
+        "serve",
+        help="Run agent-immune as a local MCP server (requires: pip install 'agent-immune[mcp]')",
+    )
+    serve.add_argument(
+        "--transport",
+        choices=("stdio", "sse", "streamable-http", "http"),
+        default="stdio",
+        help="MCP transport: stdio (default), sse, streamable-http, or http (alias for streamable-http)",
+    )
+    serve.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        metavar="N",
+        help="TCP port for sse / streamable-http / http (ignored for stdio; default: 8000)",
+    )
+
     return p
 
 
@@ -69,6 +87,12 @@ def cmd_assess(args: argparse.Namespace) -> None:
             print(f"Feedback:     {'; '.join(result.feedback)}")
 
 
+def cmd_serve(args: argparse.Namespace) -> None:
+    from agent_immune.mcp_server import run_mcp_server
+
+    run_mcp_server(transport=args.transport, port=args.port)
+
+
 def cmd_scan_output(args: argparse.Namespace) -> None:
     text = _read_text(args.text)
     immune = AdaptiveImmuneSystem()
@@ -99,6 +123,8 @@ def main() -> None:
         cmd_assess(args)
     elif args.command == "scan-output":
         cmd_scan_output(args)
+    elif args.command == "serve":
+        cmd_serve(args)
     else:
         parser.print_help()
         sys.exit(1)

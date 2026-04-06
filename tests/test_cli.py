@@ -127,3 +127,10 @@ def test_main_assess() -> None:
 def test_main_scan_output() -> None:
     with mock.patch("sys.argv", ["agent-immune", "scan-output", "hello"]):
         main()
+
+
+def test_main_serve() -> None:
+    with mock.patch("agent_immune.mcp_server.run_mcp_server") as mock_run:
+        with mock.patch("sys.argv", ["agent-immune", "serve", "--transport", "stdio", "--port", "9999"]):
+            main()
+        mock_run.assert_called_once_with(transport="stdio", port=9999)

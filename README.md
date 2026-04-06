@@ -4,7 +4,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://python.org)
 [![Coverage 94%](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](tests/)
 [![License Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
-[![170 tests](https://img.shields.io/badge/tests-170%20passing-brightgreen.svg)](tests/)
+[![179 tests](https://img.shields.io/badge/tests-179%20passing-brightgreen.svg)](tests/)
 
 Adaptive threat intelligence for AI agent security: **semantic memory**, **multi-turn escalation**, **output scanning**, **rate limiting**, and **prompt hardening** — designed to complement deterministic governance stacks (e.g. [Microsoft Agent OS](https://github.com/microsoft/agent-governance-toolkit)), not replace them.
 
@@ -40,9 +40,46 @@ findings : cred_aws, cred_password_assign
 ```bash
 pip install -e ".[dev]"          # core + tests (regex-only, no GPU)
 pip install -e ".[memory,dev]"   # + sentence-transformers for semantic memory
+pip install 'agent-immune[mcp]'  # Model Context Protocol server (stdio / HTTP)
 ```
 
-Python **3.9+** required; 3.11+ recommended.
+Python **3.9+** required; 3.11+ recommended. The MCP stack targets **Python 3.10+** (see the `mcp` package).
+
+## MCP server (local)
+
+Run agent-immune as an **MCP** server so hosts (Claude Desktop, Cursor, VS Code, etc.) can call security tools without embedding the library:
+
+```bash
+pip install 'agent-immune[mcp]'
+python -m agent_immune serve --transport stdio
+```
+
+| Transport | When to use |
+|-----------|-------------|
+| `stdio` (default) | Most desktop clients — they spawn the process and talk over stdin/stdout. |
+| `sse` | HTTP clients that expect the legacy SSE MCP transport (`--port` binds `127.0.0.1`). |
+| `streamable-http` or `http` | Recommended HTTP transport for newer clients / MCP Inspector (`http://127.0.0.1:8000/mcp` by default). |
+
+**Tools exposed:** `assess_input`, `assess_output`, `learn_threat`, `harden_prompt`, `get_metrics`.
+
+Example **Claude Code** (HTTP):
+
+```bash
+python -m agent_immune serve --transport http --port 8000
+# In another terminal:
+# claude mcp add --transport http agent-immune http://127.0.0.1:8000/mcp
+```
+
+### Available on
+
+[![Smithery](https://img.shields.io/badge/Smithery-submit%20server-111827?style=flat)](https://smithery.ai/new)
+[![MCP.so](https://img.shields.io/badge/MCP.so-directory-3B82F6?style=flat)](https://mcp.so/)
+[![Glama](https://img.shields.io/badge/Glama-MCP%20servers-111827?style=flat)](https://glama.ai/)
+[![PulseMCP](https://img.shields.io/badge/PulseMCP-GitHub%20index-8B5CF6?style=flat)](https://www.pulsemcp.com/)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-official-22C55E?style=flat)](https://github.com/modelcontextprotocol/registry)
+[![Cursor](https://img.shields.io/badge/Cursor-marketplace-000000?style=flat)](https://cursor.com/)
+
+After each listing goes live, replace badge URLs with your canonical listing page. Submission details: [docs/mcp_marketplaces.md](docs/mcp_marketplaces.md).
 
 ## Quick start
 
@@ -268,6 +305,7 @@ PYTHONPATH=src python demos/demo_full_lifecycle.py
 - [Comparison](docs/comparison.md)
 - [Benchmarks](docs/benchmarks.md)
 - [Roadmap](docs/roadmap.md)
+- [MCP marketplaces](docs/mcp_marketplaces.md) — Smithery, MCP.so, Glama, registry, Cursor
 - [Changelog](CHANGELOG.md)
 
 ## Landscape

@@ -43,12 +43,16 @@ dependencies = [
 memory = [
     "sentence-transformers>=2.2",
 ]
+mcp = [
+    "mcp[cli]>=1.0",
+]
 bench = [
     "datasets>=2.14",
     "pandas>=2.0",
 ]
 all = [
     "agent-immune[memory]",
+    "agent-immune[mcp]",
 ]
 dev = [
     "pytest>=7.0",

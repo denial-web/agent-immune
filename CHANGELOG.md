@@ -14,6 +14,7 @@ All notable changes to agent-immune are documented here.
 - **Configurable SecurityPolicy** — frozen Pydantic model with tunable thresholds for all detection bands, memory overrides, escalation, and session limits.
 - **Async API** — `assess_async`, `assess_output_async`, `learn_async`, `train_from_corpus_async` via `asyncio.to_thread()`. MCP middleware supports `use_async=True`.
 - **CLI** — `python -m agent_immune assess` / `scan-output` with JSON output, stdin piping.
+- **MCP server** — `python -m agent_immune serve` with `--transport` (`stdio`, `sse`, `streamable-http`, `http`) and `--port`; tools `assess_input`, `assess_output`, `learn_threat`, `harden_prompt`, `get_metrics`. Optional extra: `pip install 'agent-immune[mcp]'`.
 - **LRU session eviction** — `SessionAccumulatorRegistry` caps tracked sessions to prevent unbounded memory growth.
 - **HMAC persistence** — optional HMAC-SHA256 signing for pickle-based bank snapshots.
 - **Decomposer hit bucketing** — `exfiltration_hits`, `secret_hits`, `escalation_hits` properly routed to their own categories.
@@ -21,7 +22,7 @@ All notable changes to agent-immune are documented here.
 - **Multilingual patterns** — injection detection for English, German, Spanish, French, Croatian, and Russian.
 - **Benchmarks** — regex-only baseline + adversarial memory benchmark against deepset/prompt-injections (F1: 0.685 → 0.865 with 92 learned attacks).
 - **Six demo scripts** — standalone scoring, semantic catch, escalation, AGT hooks, learning loop, encoding bypass.
-- **170 tests, 94% coverage**.
+- **179 tests, 94% coverage**.
 
 ### Core modules
 

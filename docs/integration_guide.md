@@ -17,7 +17,13 @@ echo "Here is the API key: sk-abc123" | agent-immune scan-output
 
 # Pipe from stdin
 cat user_message.txt | agent-immune assess
+
+# MCP server (install: pip install 'agent-immune[mcp]')
+python -m agent_immune serve --transport stdio
+python -m agent_immune serve --transport streamable-http --port 8000
 ```
+
+See [MCP marketplaces](mcp_marketplaces.md) for listing on Smithery, MCP.so, Glama, and related directories.
 
 ## Core only
 
