@@ -5,8 +5,10 @@ AdaptiveImmuneSystem orchestrates normalization, decomposition, memory, trajecto
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time as _time
+from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Protocol, runtime_checkable
 
 import numpy as np
@@ -254,6 +256,23 @@ class AdaptiveImmuneSystem:
         new_count = sum(1 for entry_id, is_new in results if is_new and entry_id is not None)
         logger.info("train_from_corpus: %d new entries from %d inputs as %s", new_count, len(attacks), category)
         return new_count
+
+    def load_default_corpus(self) -> int:
+        """
+        Load the built-in curated attack corpus into semantic memory.
+
+        Provides instant protection against 50 common attack patterns across
+        11 languages and multiple categories (injection, exfiltration, indirect)
+        without requiring any training data from the user.
+
+        Returns:
+            Number of new entries stored.
+        """
+        corpus_path = Path(__file__).parent / "corpus" / "default_attacks.json"
+        with open(corpus_path, encoding="utf-8") as f:
+            entries = json.load(f)
+        attacks = [e["text"] for e in entries]
+        return self.train_from_corpus(attacks, category="confirmed", confidence=0.90)
 
     def decay_memory(self) -> None:
         """

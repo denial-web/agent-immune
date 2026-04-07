@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-immune"
-version = "0.2.1"
+version = "0.2.2"
 description = "Adaptive threat intelligence for AI agent security — semantic memory, multi-turn escalation, output scanning, rate limiting, and prompt hardening."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -16,9 +16,13 @@ keywords = [
     "prompt-injection",
     "tool-security",
     "mcp",
+    "mcp-server",
     "langchain",
+    "crewai",
     "llm-security",
     "agent-governance",
+    "semantic-memory",
+    "output-scanning",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -77,7 +81,7 @@ Changelog = "https://github.com/denial-web/agent-immune/blob/main/CHANGELOG.md"
 where = ["src"]
 
 [tool.setuptools.package-data]
-agent_immune = ["py.typed"]
+agent_immune = ["py.typed", "corpus/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
