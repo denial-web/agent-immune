@@ -5,6 +5,7 @@
 [![Coverage 94%](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](tests/)
 [![License Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![179 tests](https://img.shields.io/badge/tests-179%20passing-brightgreen.svg)](tests/)
+[![Glama](https://glama.ai/mcp/servers/denial-web/agent-immune/badges/card.svg)](https://glama.ai/mcp/servers/denial-web/agent-immune)
 
 Adaptive threat intelligence for AI agent security: **semantic memory**, **multi-turn escalation**, **output scanning**, **rate limiting**, and **prompt hardening** — designed to complement deterministic governance stacks (e.g. [Microsoft Agent OS](https://github.com/microsoft/agent-governance-toolkit)), not replace them.
 
