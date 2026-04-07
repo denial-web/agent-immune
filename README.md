@@ -336,3 +336,5 @@ PYTHONPATH=src python demos/demo_full_lifecycle.py    # full lifecycle
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+<!-- mcp-name: io.github.denial-web/agent-immune -->
