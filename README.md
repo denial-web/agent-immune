@@ -75,14 +75,10 @@ python -m agent_immune serve --transport http --port 8000
 
 ### Available on
 
-[![Smithery](https://img.shields.io/badge/Smithery-submit%20server-111827?style=flat)](https://smithery.ai/new)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-official-22C55E?style=flat)](https://registry.modelcontextprotocol.io/v0.1/servers?search=agent-immune)
 [![MCP.so](https://img.shields.io/badge/MCP.so-directory-3B82F6?style=flat)](https://mcp.so/)
-[![Glama](https://img.shields.io/badge/Glama-MCP%20servers-111827?style=flat)](https://glama.ai/)
+[![Glama](https://img.shields.io/badge/Glama-MCP%20servers-111827?style=flat)](https://glama.ai/mcp/servers/denial-web/agent-immune)
 [![PulseMCP](https://img.shields.io/badge/PulseMCP-GitHub%20index-8B5CF6?style=flat)](https://www.pulsemcp.com/)
-[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-official-22C55E?style=flat)](https://github.com/modelcontextprotocol/registry)
-[![Cursor](https://img.shields.io/badge/Cursor-marketplace-000000?style=flat)](https://cursor.com/)
-
-After each listing goes live, replace badge URLs with your canonical listing page. Submission details: [docs/mcp_marketplaces.md](docs/mcp_marketplaces.md).
 
 ## Quick start
 
