@@ -176,7 +176,7 @@ The hardener adds:
 ## Memory (semantic)
 
 ```bash
-pip install -e ".[memory]"
+pip install 'agent-immune[memory]'
 ```
 
 ```python

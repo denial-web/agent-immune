@@ -2,12 +2,12 @@
   "$schema": "https://glama.ai/mcp/schemas/server.json",
   "maintainers": ["denial-web"],
   "name": "agent-immune",
-  "description": "Adaptive security toolkit for AI agents: assess inputs for prompt injection, scan outputs for credential/PII leaks, teach new attack patterns to semantic memory, harden prompts, and monitor metrics.",
+  "description": "Adaptive AI agent security: prompt injection detection in 11 languages, semantic memory that learns from incidents, output scanning for PII/credential leaks, rate limiting, and prompt hardening.",
   "type": "mcp_server",
   "status": "beta",
   "framework": "FastMCP 1.27+",
   "tools": 5,
-  "transport": ["stdio"],
+  "transport": ["stdio", "sse", "streamable-http"],
   "keywords": [
     "security",
     "ai-security",
@@ -16,6 +16,8 @@
     "llm-security",
     "agent-governance",
     "output-scanning",
-    "prompt-hardening"
+    "prompt-hardening",
+    "multilingual",
+    "semantic-memory"
   ]
 }
