@@ -36,6 +36,8 @@ class SecurityPolicy(BaseModel):
     memory_confirm_threshold: float = Field(default=0.90, ge=0.0, le=1.0, description="Similarity to confirmed memory entry that forces BLOCK")
     memory_review_threshold: float = Field(default=0.82, ge=0.0, le=1.0, description="Similarity that upgrades to REVIEW when combined with patterns")
     escalation_upgrade: bool = Field(default=True, description="Whether escalation detection upgrades action severity")
+    detect_indirect_injection: bool = Field(default=True, description="Enable low-severity indirect injection patterns (confused deputy, HTML comments)")
+    output_scanner_config: Optional[OutputScannerConfig] = Field(default=None, description="Override output scanner weights; uses defaults if None")
     max_sessions: int = Field(default=10000, ge=1, description="LRU cap on session accumulator registry")
 
     model_config = ConfigDict(frozen=True)
@@ -74,12 +76,28 @@ class DecompositionResult(BaseModel):
     secret_hits: List[PatternHit] = Field(default_factory=list)
     escalation_hits: List[PatternHit] = Field(default_factory=list)
     delimiter_hits: List[PatternHit] = Field(default_factory=list)
+    indirect_hits: List[PatternHit] = Field(default_factory=list)
     payload_spans: List[Tuple[int, int]] = Field(default_factory=list)
 
     @property
     def all_hits(self) -> List[PatternHit]:
         """All pattern hits across categories."""
-        return self.injection_hits + self.exfiltration_hits + self.secret_hits + self.escalation_hits + self.delimiter_hits
+        return self.injection_hits + self.exfiltration_hits + self.secret_hits + self.escalation_hits + self.delimiter_hits + self.indirect_hits
+
+
+class OutputScannerConfig(BaseModel):
+    """Per-category weights and thresholds for the output scanner."""
+
+    pii_weight: float = Field(default=0.35, ge=0.0, le=1.0, description="Score increment per PII match")
+    credential_weight: float = Field(default=0.45, ge=0.0, le=1.0, description="Score increment per credential match")
+    leak_weight: float = Field(default=0.40, ge=0.0, le=1.0, description="Score increment for system prompt leak phrases")
+    base64_weight: float = Field(default=0.25, ge=0.0, le=1.0, description="Score increment for decoded base64 blobs")
+    hex_weight: float = Field(default=0.20, ge=0.0, le=1.0, description="Score increment for long hex blobs")
+    data_uri_weight: float = Field(default=0.25, ge=0.0, le=1.0, description="Score increment for data URIs")
+    url_exfil_weight: float = Field(default=0.20, ge=0.0, le=1.0, description="Score increment for long URL query strings")
+    volume_weight: float = Field(default=0.15, ge=0.0, le=1.0, description="Score increment for volume anomalies")
+
+    model_config = ConfigDict(frozen=True)
 
 
 class OutputScanResult(BaseModel):

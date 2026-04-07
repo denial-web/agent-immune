@@ -62,8 +62,10 @@ class AdaptiveImmuneSystem:
         """
         self._policy = policy or SecurityPolicy()
         self._normalizer = InputNormalizer()
-        self._decomposer = InputDecomposer()
-        self._output_scanner = OutputScanner()
+        self._decomposer = InputDecomposer(
+            detect_indirect_injection=self._policy.detect_indirect_injection,
+        )
+        self._output_scanner = OutputScanner(config=self._policy.output_scanner_config)
         self._scorer = ThreatScorer(policy=self._policy)
         self._accumulators = SessionAccumulatorRegistry(max_sessions=self._policy.max_sessions)
         self._embedder = embedder
@@ -248,14 +250,8 @@ class AdaptiveImmuneSystem:
 
             self._embedder = TextEmbedder()
             self._bank = AdversarialMemoryBank(self._embedder)
-        new_count = 0
-        for text in attacks:
-            text = text.strip()
-            if not text:
-                continue
-            entry_id, is_new = self._bank._add_threat_internal(text, category=category, confidence=confidence)
-            if is_new and entry_id is not None:
-                new_count += 1
+        results = self._bank.add_threat_batch(attacks, category=category, confidence=confidence)
+        new_count = sum(1 for entry_id, is_new in results if is_new and entry_id is not None)
         logger.info("train_from_corpus: %d new entries from %d inputs as %s", new_count, len(attacks), category)
         return new_count
 

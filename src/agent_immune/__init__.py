@@ -8,7 +8,7 @@ from agent_immune.immune import AdaptiveImmuneSystem
 from agent_immune.observability import MetricsCollector
 from agent_immune.rate_limiter import CircuitBreaker
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "AdaptiveImmuneSystem",

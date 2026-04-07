@@ -2,6 +2,35 @@
 
 All notable changes to agent-immune are documented here.
 
+## [0.2.0] — 2026-04-07
+
+### Added
+
+- **Multilingual injection detection** — 12 new patterns for Chinese, Japanese, Korean, Arabic, and Hindi. Total: 11 languages.
+- **Generalized script-mixing detector** — any non-Latin script (CJK, Arabic, Devanagari, Hangul) mixed with English imperatives now triggers detection (previously Khmer-only).
+- **Indirect injection patterns** — HTML comment injection, markdown comment injection, confused deputy attacks, URL-embedded payloads. Gated behind `SecurityPolicy.detect_indirect_injection` flag.
+- **Configurable output scanner** — new `OutputScannerConfig` model with per-category weights (PII, credentials, base64, hex, etc.). Passed via `SecurityPolicy.output_scanner_config`.
+- **Reduced false positives** — output scanner now exempts SHA-256/512 hex hashes, requires threat keywords in decoded base64, and distinguishes bare JWT tokens from documented examples.
+- **Optional ANN index** — `hnswlib`-backed HNSW index for memory bank search, reducing query time from O(n) to O(log n). Install via `pip install 'agent-immune[fast-memory]'`. Falls back to NumPy when not installed.
+- **Public batch API** — `AdversarialMemoryBank.add_threat_batch()` for bulk loading. `train_from_corpus` now uses the public API instead of private internals.
+- **MCP server memory** — `build_mcp()` now initializes with a working embedder and memory bank. `learn_threat` actually stores patterns. Fallback embedder status surfaced in tool responses.
+- **Fallback embedder warnings** — `TextEmbedder.using_fallback` property; logs WARNING when hash-based fallback is active. Memory bank warns about degraded matching quality.
+
+### Changed
+
+- `DecompositionResult` now includes `indirect_hits` field.
+- Volume anomaly condition in output scanner explicitly parenthesized for clarity.
+- Test fixtures diversified: replaced 46 repetitive jailbreak variants with 28 genuinely distinct attack patterns across multiple categories and languages.
+- Russian injection pattern updated to handle post-homoglyph-normalization text.
+
+### Fixed
+
+- MCP `learn_threat` tool now correctly stores entries (was silently returning `stored: false` due to missing memory bank).
+
+### Stats
+
+- **181 tests**, 0 lint errors, 11 languages supported.
+
 ## [0.1.1] — 2026-04-07
 
 ### Added

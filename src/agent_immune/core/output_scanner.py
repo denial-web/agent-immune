@@ -9,7 +9,7 @@ import logging
 import re
 from typing import List
 
-from agent_immune.core.models import OutputScanResult
+from agent_immune.core.models import OutputScannerConfig, OutputScanResult
 
 logger = logging.getLogger("agent_immune.core.output_scanner")
 
@@ -51,16 +51,36 @@ _BASE64_BLOB = re.compile(r"\b[A-Za-z0-9+/]{40,}={0,2}\b")
 _HEX_BLOB = re.compile(r"\b(?:0x)?[a-fA-F0-9]{64,}\b")
 _DATA_URI = re.compile(r"data:[^;]+;base64,[A-Za-z0-9+/=]+", re.I)
 
+_SAFE_HEX_LENGTHS = frozenset({64, 66, 128, 130})
+_SHA_PREFIX = re.compile(r"\b(sha256|sha512|SHA-256|SHA-512|hash|digest|checksum)[:\s=]+", re.I)
+
+_UUID_RE = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+
+_BASE64_THREAT_KEYWORDS = re.compile(
+    r"\b(password|secret|token|key|credential|admin|sudo|override|bypass)\b", re.I
+)
+
+_JWT_BARE = re.compile(r"\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
+_CODE_FENCE_REGION = re.compile(r"```[\s\S]*?```|`[^`]+`")
+_DOC_CONTEXT = re.compile(r"\b(example|documentation|sample|demo|tutorial|test)\b", re.I)
+
 _URL_LONG_QUERY = re.compile(r"https?://[^\s]+[?&][^\s]{200,}")
 
 _JSON_ARRAY_ITEMS = re.compile(r"\[\s*(?:\{|\")")
 
 
+def _inside_code_fence(text: str, start: int, end: int) -> bool:
+    for m in _CODE_FENCE_REGION.finditer(text):
+        if m.start() <= start and end <= m.end():
+            return True
+    return False
+
+
 class OutputScanner:
     """Heuristic scanner for sensitive content in model or tool outputs."""
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, config: OutputScannerConfig | None = None) -> None:
+        self._cfg = config or OutputScannerConfig()
 
     def scan(self, text: str) -> OutputScanResult:
         """
@@ -76,6 +96,7 @@ class OutputScanner:
             None.
         """
         t = text or ""
+        cfg = self._cfg
         findings: List[str] = []
         score = 0.0
 
@@ -84,19 +105,19 @@ class OutputScanner:
             if pat.search(t):
                 contains_pii = True
                 findings.append(name)
-                score = min(1.0, score + 0.35)
+                score = min(1.0, score + cfg.pii_weight)
 
         contains_credentials = False
         for name, pat in _CREDENTIAL_PATTERNS:
             if pat.search(t):
                 contains_credentials = True
                 findings.append(name)
-                score = min(1.0, score + 0.45)
+                score = min(1.0, score + cfg.credential_weight)
 
         contains_system_prompt_leak = bool(_LEAK_PHRASES.search(t))
         if contains_system_prompt_leak:
             findings.append("system_prompt_leak_heuristic")
-            score = min(1.0, score + 0.4)
+            score = min(1.0, score + cfg.leak_weight)
 
         contains_encoded = False
         for m in _BASE64_BLOB.finditer(t):
@@ -104,29 +125,49 @@ class OutputScanner:
             try:
                 raw = base64.b64decode(chunk + "=="[: (4 - len(chunk) % 4) % 4], validate=False)
                 if len(raw) > 16 and raw.isascii():
-                    contains_encoded = True
-                    findings.append("base64_blob")
-                    score = min(1.0, score + 0.25)
-                    break
+                    decoded_str = raw.decode("ascii", errors="replace")
+                    if _BASE64_THREAT_KEYWORDS.search(decoded_str):
+                        contains_encoded = True
+                        findings.append("base64_blob")
+                        score = min(1.0, score + cfg.base64_weight)
+                        break
             except Exception:
                 continue
-        if _HEX_BLOB.search(t):
+
+        for m in _HEX_BLOB.finditer(t):
+            hex_str = m.group(0)
+            clean_hex = hex_str[2:] if hex_str.startswith("0x") else hex_str
+            if len(clean_hex) in _SAFE_HEX_LENGTHS:
+                context_start = max(0, m.start() - 40)
+                if _SHA_PREFIX.search(t[context_start:m.start()]):
+                    continue
             contains_encoded = True
             findings.append("hex_blob")
-            score = min(1.0, score + 0.2)
+            score = min(1.0, score + cfg.hex_weight)
+            break
+
         if _DATA_URI.search(t):
             contains_encoded = True
             findings.append("data_uri")
-            score = min(1.0, score + 0.25)
+            score = min(1.0, score + cfg.data_uri_weight)
+
+        for m in _JWT_BARE.finditer(t):
+            if not _inside_code_fence(t, m.start(), m.end()):
+                context_start = max(0, m.start() - 80)
+                if not _DOC_CONTEXT.search(t[context_start:m.start()]):
+                    contains_credentials = True
+                    findings.append("cred_jwt_bare")
+                    score = min(1.0, score + cfg.credential_weight)
+                    break
 
         url_exfil = bool(_URL_LONG_QUERY.search(t))
         if url_exfil:
             findings.append("long_url_query")
-            score = min(1.0, score + 0.2)
+            score = min(1.0, score + cfg.url_exfil_weight)
 
-        if len(_JSON_ARRAY_ITEMS.findall(t)) > 50 or t.count("\n") > 200 and t.count(",") > 300:
+        if (len(_JSON_ARRAY_ITEMS.findall(t)) > 50) or (t.count("\n") > 200 and t.count(",") > 300):
             findings.append("volume_anomaly")
-            score = min(1.0, score + 0.15)
+            score = min(1.0, score + cfg.volume_weight)
 
         result = OutputScanResult(
             contains_pii=contains_pii,

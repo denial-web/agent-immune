@@ -36,6 +36,11 @@ def khmer_cases() -> List[dict[str, Any]]:
 
 
 @pytest.fixture
+def multilingual_cases() -> List[dict[str, Any]]:
+    return _load_json("multilingual_attacks.json")
+
+
+@pytest.fixture
 def encoding_cases() -> List[dict[str, Any]]:
     return _load_json("encoding_bypass_attacks.json")
 
@@ -43,6 +48,11 @@ def encoding_cases() -> List[dict[str, Any]]:
 @pytest.fixture
 def exfil_cases() -> List[dict[str, Any]]:
     return _load_json("exfiltration_attacks.json")
+
+
+@pytest.fixture
+def indirect_injection_cases() -> List[dict[str, Any]]:
+    return _load_json("indirect_injection_attacks.json")
 
 
 @pytest.fixture

@@ -4,7 +4,7 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://python.org)
 [![Coverage 94%](https://img.shields.io/badge/coverage-94%25-brightgreen.svg)](tests/)
 [![License Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
-[![179 tests](https://img.shields.io/badge/tests-179%20passing-brightgreen.svg)](tests/)
+[![181 tests](https://img.shields.io/badge/tests-181%20passing-brightgreen.svg)](tests/)
 [![Glama](https://glama.ai/mcp/servers/denial-web/agent-immune/badges/card.svg)](https://glama.ai/mcp/servers/denial-web/agent-immune)
 
 Adaptive threat intelligence for AI agent security: **semantic memory**, **multi-turn escalation**, **output scanning**, **rate limiting**, and **prompt hardening** — designed to complement deterministic governance stacks (e.g. [Microsoft Agent OS](https://github.com/microsoft/agent-governance-toolkit)), not replace them.
@@ -39,9 +39,11 @@ findings : cred_aws, cred_password_assign
 ## Install
 
 ```bash
-pip install -e ".[dev]"          # core + tests (regex-only, no GPU)
-pip install -e ".[memory,dev]"   # + sentence-transformers for semantic memory
-pip install 'agent-immune[mcp]'  # Model Context Protocol server (stdio / HTTP)
+pip install agent-immune                    # core (regex-only, no GPU)
+pip install 'agent-immune[memory]'          # + sentence-transformers for semantic memory
+pip install 'agent-immune[mcp]'             # Model Context Protocol server (stdio / HTTP)
+pip install 'agent-immune[fast-memory]'     # + hnswlib for fast ANN search at scale
+pip install 'agent-immune[all]'             # everything
 ```
 
 Python **3.9+** required; 3.11+ recommended. The MCP stack targets **Python 3.10+** (see the `mcp` package).
@@ -104,8 +106,15 @@ if immune.output_blocks(scan):
 
 ```python
 from agent_immune import AdaptiveImmuneSystem, SecurityPolicy
+from agent_immune.core.models import OutputScannerConfig
 
-strict = SecurityPolicy(allow_threshold=0.20, review_threshold=0.45, output_block_threshold=0.50)
+strict = SecurityPolicy(
+    allow_threshold=0.20,
+    review_threshold=0.45,
+    output_block_threshold=0.50,
+    detect_indirect_injection=True,
+    output_scanner_config=OutputScannerConfig(pii_weight=0.5, credential_weight=0.6),
+)
 immune = AdaptiveImmuneSystem(policy=strict)
 ```
 
@@ -191,8 +200,10 @@ Run `PYTHONPATH=src python demos/demo_full_lifecycle.py` to reproduce this on yo
 |------------|-------------------|--------------|
 | Keyword injection | Blocked | Blocked |
 | Rephrased attack | **Often missed** | **Caught** via semantic memory |
+| Multilingual injection | English-only rules | **11 languages** (EN, DE, ES, FR, HR, RU, ZH, JA, KO, AR, HI) |
+| Indirect injection | Not detected | HTML comments, confused deputy, URL payloads |
 | Multi-turn escalation | Not tracked | Detected via session trajectory |
-| Output exfiltration | Rarely scanned | PII, creds, prompt leak, encoded blobs |
+| Output exfiltration | Rarely scanned | PII, creds, prompt leak, encoded blobs (configurable weights) |
 | Learns from incidents | Manual rule updates | `immune.learn()` — instant semantic coverage |
 | Rate limiting | Separate system | Built-in circuit breaker |
 | Prompt hardening | DIY | `PromptHardener` with role-lock, sandboxing, output guard |
@@ -259,7 +270,7 @@ python bench/run_benchmarks.py
 | [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections) | 662 | 1.000 | 0.342 | 0.510 | 0.0 | 0.12 ms |
 | Combined | 847 | 1.000 | 0.521 | 0.685 | 0.0 | 0.12 ms |
 
-Zero false positives across all datasets. Multilingual patterns cover English, German, Spanish, French, Croatian, and Russian.
+Zero false positives across all datasets. Multilingual patterns cover English, German, Spanish, French, Croatian, Russian, Chinese, Japanese, Korean, Arabic, and Hindi.
 
 ### With adversarial memory
 

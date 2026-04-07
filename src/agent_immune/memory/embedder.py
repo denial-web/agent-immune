@@ -34,17 +34,12 @@ class TextEmbedder:
 
         Args:
             model_name: sentence-transformers model id.
-
-        Returns:
-            None.
-
-        Raises:
-            None.
         """
         self._model_name = model_name
         self._model: object | str | None = None
         self._dim: Optional[int] = None
         self._init_lock = threading.Lock()
+        self._fallback_warned = False
 
     def encode(self, text: str) -> np.ndarray:
         """
@@ -88,6 +83,13 @@ class TextEmbedder:
                         logger.warning("sentence-transformers unavailable (%s); using hash fallback", exc)
                         self._model = "fallback"
         if self._model == "fallback":
+            if not self._fallback_warned:
+                logger.warning(
+                    "Using hash-based fallback embedder. Memory matching will not be semantic. "
+                    "Install sentence-transformers for production use: "
+                    "pip install 'agent-immune[memory]'"
+                )
+                self._fallback_warned = True
             return np.stack([_hash_embed(t) for t in texts], axis=0)
         encode_fn = getattr(self._model, "encode")
         out = encode_fn(texts, normalize_embeddings=True)
@@ -99,19 +101,15 @@ class TextEmbedder:
         return arr
 
     @property
+    def using_fallback(self) -> bool:
+        """True if the embedder is using the non-semantic hash fallback."""
+        if self._model is None:
+            _ = self.encode("fallback probe")
+        return self._model == "fallback"
+
+    @property
     def dimension(self) -> int:
-        """
-        Return embedding dimension after a probe encode.
-
-        Args:
-            None.
-
-        Returns:
-            Vector dimension.
-
-        Raises:
-            None.
-        """
+        """Return embedding dimension after a probe encode."""
         if self._dim is not None:
             return self._dim
         _ = self.encode("dimension probe")

@@ -13,13 +13,19 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+import logging
+
 from agent_immune import AdaptiveImmuneSystem, PromptHardener
+from agent_immune.memory.embedder import TextEmbedder
+from agent_immune.memory.bank import AdversarialMemoryBank
 from agent_immune.observability import MetricsCollector
 
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError:  # pragma: no cover - exercised when mcp extra not installed
     FastMCP = None  # type: ignore[misc, assignment]
+
+_logger = logging.getLogger("agent_immune.mcp_server")
 
 
 def build_mcp(host: str = "127.0.0.1", port: int = 8000) -> Any:
@@ -43,7 +49,15 @@ def build_mcp(host: str = "127.0.0.1", port: int = 8000) -> Any:
         )
 
     metrics = MetricsCollector()
-    immune = AdaptiveImmuneSystem(metrics=metrics)
+    embedder = TextEmbedder()
+    bank = AdversarialMemoryBank(embedder)
+    immune = AdaptiveImmuneSystem(embedder=embedder, bank=bank, metrics=metrics)
+    if embedder.using_fallback:
+        _logger.warning(
+            "MCP server running with hash-based fallback embedder. "
+            "Memory matching will not be semantic. "
+            "Install sentence-transformers for production use."
+        )
     hardener = PromptHardener()
 
     mcp = FastMCP(
@@ -86,17 +100,23 @@ def build_mcp(host: str = "127.0.0.1", port: int = 8000) -> Any:
         category: str = "suspected",
         confidence: float = 0.5,
     ) -> dict[str, Any]:
-        """Teach adaptive memory a new attack pattern (requires a configured memory bank)."""
+        """Teach adaptive memory a new attack pattern."""
         entry_id = immune.learn(text, category=category, confidence=confidence)
+        note = None
+        if entry_id is None:
+            note = (
+                "No memory bank active. Install agent-immune[memory] and ensure an embedder-backed "
+                "bank is configured, or use train_from_corpus from Python."
+            )
+        elif embedder.using_fallback:
+            note = (
+                "Stored, but using hash-based fallback embedder (not semantic). "
+                "Install sentence-transformers for accurate similarity matching."
+            )
         return {
             "entry_id": entry_id,
             "stored": entry_id is not None,
-            "note": None
-            if entry_id is not None
-            else (
-                "No memory bank active. Install agent-immune[memory] and ensure an embedder-backed "
-                "bank is configured, or use train_from_corpus from Python."
-            ),
+            "note": note,
         }
 
     @mcp.tool()

@@ -20,6 +20,17 @@ _ENGLISH_IMPERATIVES = re.compile(
     re.I,
 )
 
+_NON_LATIN_RE = re.compile(
+    r"[\u0600-\u06ff"   # Arabic
+    r"\u0900-\u097f"    # Devanagari (Hindi)
+    r"\u1780-\u17ff"    # Khmer
+    r"\u3040-\u309f"    # Hiragana
+    r"\u30a0-\u30ff"    # Katakana
+    r"\u4e00-\u9fff"    # CJK Unified Ideographs
+    r"\uac00-\ud7af"    # Hangul Syllables
+    r"]"
+)
+
 _QUOTE_REGIONS = re.compile(
     r"(`{1,3}[^`]+`{1,3}|\"[^\"]{0,500}\"|'[^']{0,500}')",
     re.DOTALL,
@@ -36,7 +47,8 @@ def _inside_quoted(text: str, start: int, end: int) -> bool:
 class InputDecomposer:
     """Scan normalized text for threat patterns and produce scores plus redacted clean text."""
 
-    def __init__(self) -> None:
+    def __init__(self, detect_indirect_injection: bool = True) -> None:
+        self._detect_indirect = detect_indirect_injection
         self._injection: List[Tuple[str, re.Pattern[str], str]] = [
             (
                 "injection_ignore",
@@ -217,7 +229,67 @@ class InputDecomposer:
             ),
             (
                 "injection_ru_forget",
-                re.compile(r"забудьте\s+все", re.I),
+                re.compile(r"з[аa]б[уy]дьт[еe]\s+вс[еe]|з[аa]б[уy]дьт[еe]\s+в[сc][еe]", re.I),
+                "high",
+            ),
+            # Chinese
+            (
+                "injection_zh_ignore",
+                re.compile(r"忽略(所有|之前的?|以上的?)(指令|指示|规则|说明)"),
+                "high",
+            ),
+            (
+                "injection_zh_forget",
+                re.compile(r"忘记(之前|以前|上面)(的)?(指令|指示|规则|内容|一切)"),
+                "high",
+            ),
+            (
+                "injection_zh_you_are_now",
+                re.compile(r"你现在是.{0,20}(无限制|黑客|恶意|管理员|不受约束)"),
+                "high",
+            ),
+            # Japanese
+            (
+                "injection_ja_ignore",
+                re.compile(r"(すべての|以前の|上記の)(指示|指令|ルール|命令)を(無視|忘れ)"),
+                "high",
+            ),
+            (
+                "injection_ja_forget",
+                re.compile(r"(以前|これまで)の(指示|指令|ルール)を忘れ"),
+                "high",
+            ),
+            # Korean
+            (
+                "injection_ko_ignore",
+                re.compile(r"(모든|이전의?|위의)\s*(지시|지침|규칙|명령)을?\s*(무시|잊어)"),
+                "high",
+            ),
+            (
+                "injection_ko_forget",
+                re.compile(r"(이전|위)\s*(지시|지침)를?\s*잊어"),
+                "high",
+            ),
+            # Arabic
+            (
+                "injection_ar_ignore",
+                re.compile(r"تجاهل\s+(جميع\s+)?التعليمات"),
+                "high",
+            ),
+            (
+                "injection_ar_forget",
+                re.compile(r"(انس[َ]?|تناس[َ]?)\s+(جميع\s+)?التعليمات\s*(السابقة)?"),
+                "high",
+            ),
+            # Hindi
+            (
+                "injection_hi_ignore",
+                re.compile(r"(सभी|पिछले|पहले\s+के)\s*(निर्देशों?|नियमों?)\s*को\s*(अनदेखा|नज़रअंदाज़)\s*कर"),
+                "high",
+            ),
+            (
+                "injection_hi_forget",
+                re.compile(r"पिछले\s*(निर्देश|नियम|आदेश)\s*भूल\s*जाओ"),
                 "high",
             ),
             (
@@ -316,12 +388,43 @@ class InputDecomposer:
             ("delim_chatml", re.compile(r"<\|im_start\|>|<\|system\|>|<\|redacted_im_end\|>", re.I), "high"),
             ("delim_dash", re.compile(r"---\s*system\s*---", re.I), "medium"),
         ]
+        self._indirect: List[Tuple[str, re.Pattern[str], str]] = [
+            (
+                "indirect_html_comment",
+                re.compile(r"<!--\s*.{0,60}?(ignore|forget|override|new\s+instructions?|system\s+prompt)\s*.{0,60}?-->", re.I),
+                "medium",
+            ),
+            (
+                "indirect_md_comment",
+                re.compile(r"\[//\]:\s*#\s*\(.{0,100}?(ignore|forget|override|new\s+instructions?)\)", re.I),
+                "medium",
+            ),
+            (
+                "indirect_confused_deputy",
+                re.compile(
+                    r"\b(the\s+user\s+has\s+authorized|as\s+per\s+the\s+admin'?s?\s+request|"
+                    r"the\s+administrator\s+has\s+approved|per\s+user\s+instructions?\s*,?\s+override|"
+                    r"the\s+system\s+owner\s+wants\s+you\s+to)\b",
+                    re.I,
+                ),
+                "low",
+            ),
+            (
+                "indirect_url_payload",
+                re.compile(
+                    r"https?://[^\s]*[#?&][^\s]*(ignore|forget|override|system\s*prompt|new\s*instruct)",
+                    re.I,
+                ),
+                "medium",
+            ),
+        ]
 
         self._weight_injection = 0.35
         self._weight_exfil = 0.40
         self._weight_secret = 0.25
         self._weight_escalation = 0.20
         self._weight_delimiter = 0.15
+        self._weight_indirect = 0.15
 
     def decompose(self, norm: NormalizationResult) -> DecompositionResult:
         """
@@ -344,6 +447,7 @@ class InputDecomposer:
             "secret": [],
             "escalation": [],
             "delimiter": [],
+            "indirect": [],
         }
         payload_spans: List[Tuple[int, int]] = []
 
@@ -359,7 +463,7 @@ class InputDecomposer:
                     start, end = m.span()
                     inside = _inside_quoted(text, start, end)
                     mult = 0.15 if inside else 1.0
-                    sev_f = 1.0 if sev == "high" else 0.6
+                    sev_f = 1.0 if sev == "high" else (0.3 if sev == "low" else 0.6)
                     score_acc += sev_f * mult
                     bucket.append(PatternHit(
                         pattern_idx=idx,
@@ -377,9 +481,13 @@ class InputDecomposer:
         sec_hits = scan_group(self._secret, "secret")
         esc_hits = scan_group(self._escalation, "escalation")
         _ = scan_group(self._delimiter, "delimiter")
+        ind_hits = 0.0
+        if self._detect_indirect:
+            ind_hits = scan_group(self._indirect, "indirect")
 
         injection_hits = hit_buckets["injection"]
         delimiter_hits = hit_buckets["delimiter"]
+        indirect_hits = hit_buckets["indirect"]
 
         pattern_linear = min(
             1.0,
@@ -387,16 +495,20 @@ class InputDecomposer:
             + min(1.0, exf_hits * 0.25) * self._weight_exfil
             + min(1.0, sec_hits * 0.3) * self._weight_secret
             + min(1.0, esc_hits * 0.35) * self._weight_escalation
-            + (min(1.0, len(delimiter_hits) * 0.5) * self._weight_delimiter),
+            + (min(1.0, len(delimiter_hits) * 0.5) * self._weight_delimiter)
+            + min(1.0, ind_hits * 0.25) * self._weight_indirect,
         )
-        total_threat_hits = sum(len(hit_buckets[c]) for c in ("injection", "exfiltration", "secret", "escalation"))
+        total_threat_hits = sum(len(hit_buckets[c]) for c in ("injection", "exfiltration", "secret", "escalation", "indirect"))
         hit_boost = min(0.6, 0.18 * (total_threat_hits + len(delimiter_hits)))
 
         khmer_chars = len(_KHMER_RE.findall(text))
         khmer_ratio = khmer_chars / max(1, len(text))
+        non_latin_chars = len(_NON_LATIN_RE.findall(text))
+        non_latin_ratio = non_latin_chars / max(1, len(text))
         language_mixing_score = 0.0
-        if khmer_ratio > 0.10 and _ENGLISH_IMPERATIVES.search(text):
-            language_mixing_score = min(1.0, khmer_ratio + 0.3)
+        mixing_ratio = max(khmer_ratio, non_latin_ratio)
+        if mixing_ratio > 0.10 and _ENGLISH_IMPERATIVES.search(text):
+            language_mixing_score = min(1.0, mixing_ratio + 0.3)
             pattern_linear = min(1.0, pattern_linear + 0.2)
 
         injection_score = min(1.0, pattern_linear + language_mixing_score * 0.25 + hit_boost)
@@ -415,6 +527,7 @@ class InputDecomposer:
             secret_hits=hit_buckets["secret"],
             escalation_hits=hit_buckets["escalation"],
             delimiter_hits=delimiter_hits,
+            indirect_hits=indirect_hits,
             payload_spans=merged_spans,
         )
         logger.debug("decompose score=%s hits=%s", injection_score, total_threat_hits)

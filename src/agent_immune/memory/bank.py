@@ -1,7 +1,8 @@
 """
 Adversarial memory with confirmed vs suspected tiers, deduplication, and decay.
 
-Uses NumPy cosine similarity for search. Thread-safe via threading.Lock.
+Uses NumPy cosine similarity for search, with optional hnswlib acceleration.
+Thread-safe via threading.Lock.
 """
 
 from __future__ import annotations
@@ -20,13 +21,23 @@ import numpy as np
 from agent_immune.memory.embedder import TextEmbedder
 from agent_immune.memory.entry import AdversarialEntry, new_entry, text_hash
 
+try:
+    import hnswlib
+
+    _HAS_HNSW = True
+except ImportError:  # pragma: no cover
+    _HAS_HNSW = False
+
 logger = logging.getLogger("agent_immune.memory.bank")
 
 _SCHEMA_VERSION = 1
+_HNSW_REBUILD_THRESHOLD = 64
 
 
 class AdversarialMemoryBank:
     """Semantic store of known attacks with inner-product (cosine) search on L2-normalized vectors."""
+
+    _fallback_quality_warned: bool = False
 
     def __init__(
         self,
@@ -55,10 +66,58 @@ class AdversarialMemoryBank:
         self._suspected: List[AdversarialEntry] = []
         self._by_hash: Dict[str, AdversarialEntry] = {}
         self._lock = threading.Lock()
+        self._hnsw_index: object | None = None
+        self._hnsw_id_map: List[AdversarialEntry] = []
+        self._hnsw_dirty = 0
 
     def _ensure_dim(self, vec: np.ndarray) -> None:
         if self._dim is None:
             self._dim = int(vec.shape[-1])
+
+    def _rebuild_hnsw(self) -> None:
+        """Rebuild the HNSW index from all entries with embeddings."""
+        if not _HAS_HNSW or self._dim is None:
+            return
+        all_entries = [e for e in self._confirmed + self._suspected if e.embedding is not None]
+        if not all_entries:
+            self._hnsw_index = None
+            self._hnsw_id_map = []
+            self._hnsw_dirty = 0
+            return
+        dim = self._dim
+        idx = hnswlib.Index(space="cosine", dim=dim)
+        idx.init_index(max_elements=max(len(all_entries) * 2, 256), ef_construction=100, M=16)
+        idx.set_ef(50)
+        vecs = np.stack([e.embedding for e in all_entries]).astype(np.float32)
+        idx.add_items(vecs, list(range(len(all_entries))))
+        self._hnsw_index = idx
+        self._hnsw_id_map = list(all_entries)
+        self._hnsw_dirty = 0
+        logger.debug("rebuilt HNSW index with %d entries", len(all_entries))
+
+    def _hnsw_add_entry(self, entry: AdversarialEntry) -> None:
+        """Incrementally add to HNSW; trigger rebuild after threshold."""
+        if not _HAS_HNSW or entry.embedding is None or self._dim is None:
+            return
+        self._hnsw_dirty += 1
+        if self._hnsw_dirty >= _HNSW_REBUILD_THRESHOLD or self._hnsw_index is None:
+            self._rebuild_hnsw()
+
+    def _search_hnsw(self, q: np.ndarray, k: int) -> List[Tuple[float, AdversarialEntry]]:
+        """Search using HNSW index; returns (similarity, entry) pairs."""
+        if self._hnsw_index is None or not self._hnsw_id_map:
+            return []
+        actual_k = min(k, len(self._hnsw_id_map))
+        if actual_k == 0:
+            return []
+        qn = q.reshape(1, -1).astype(np.float32)
+        labels, distances = self._hnsw_index.knn_query(qn, k=actual_k)
+        results = []
+        for label, dist in zip(labels[0], distances[0]):
+            if 0 <= label < len(self._hnsw_id_map):
+                sim = 1.0 - float(dist)
+                results.append((sim, self._hnsw_id_map[label]))
+        return results
 
     def _search_numpy(
         self,
@@ -95,12 +154,35 @@ class AdversarialMemoryBank:
 
         Returns:
             Entry id if stored, or None if evicted entirely.
-
-        Raises:
-            None.
         """
         _id, _ = self._add_threat_internal(text, category, confidence)
         return _id
+
+    def add_threat_batch(
+        self,
+        texts: List[str],
+        category: str = "suspected",
+        confidence: float = 0.5,
+    ) -> List[Tuple[Optional[str], bool]]:
+        """
+        Bulk-add threat strings to memory.
+
+        Args:
+            texts: List of attack text strings.
+            category: "confirmed" or "suspected".
+            confidence: Confidence score for all entries.
+
+        Returns:
+            List of (entry_id, is_new) tuples, one per input text.
+        """
+        results: List[Tuple[Optional[str], bool]] = []
+        for text in texts:
+            text = text.strip()
+            if not text:
+                results.append((None, False))
+                continue
+            results.append(self._add_threat_internal(text, category, confidence))
+        return results
 
     def _add_threat_internal(
         self,
@@ -133,6 +215,7 @@ class AdversarialMemoryBank:
                 self._confirmed.append(entry)
             else:
                 self._suspected.append(entry)
+            self._hnsw_add_entry(entry)
             self._evict_if_needed()
             return entry.id, True
 
@@ -152,18 +235,36 @@ class AdversarialMemoryBank:
         """
         q = self._embedder.encode(text)
         self._ensure_dim(q)
+        if (
+            not AdversarialMemoryBank._fallback_quality_warned
+            and hasattr(self._embedder, "using_fallback")
+            and self._embedder.using_fallback
+            and (self._confirmed or self._suspected)
+        ):
+            logger.warning(
+                "Memory bank has entries but embedder is using hash fallback. "
+                "Similarity matching will be unreliable. "
+                "Install sentence-transformers for production use."
+            )
+            AdversarialMemoryBank._fallback_quality_warned = True
         with self._lock:
             max_sim = 0.0
             texts_out: List[str] = []
             ids_out: List[str] = []
-            for sim, ent in self._search_numpy(self._confirmed, q, k):
-                max_sim = max(max_sim, sim)
-                texts_out.append(ent.text[:200])
-                ids_out.append(ent.id)
-            for sim, ent in self._search_numpy(self._suspected, q, k):
-                max_sim = max(max_sim, sim)
-                texts_out.append(ent.text[:200])
-                ids_out.append(ent.id)
+            if self._hnsw_index is not None and self._hnsw_id_map:
+                for sim, ent in self._search_hnsw(q, k * 2):
+                    max_sim = max(max_sim, sim)
+                    texts_out.append(ent.text[:200])
+                    ids_out.append(ent.id)
+            else:
+                for sim, ent in self._search_numpy(self._confirmed, q, k):
+                    max_sim = max(max_sim, sim)
+                    texts_out.append(ent.text[:200])
+                    ids_out.append(ent.id)
+                for sim, ent in self._search_numpy(self._suspected, q, k):
+                    max_sim = max(max_sim, sim)
+                    texts_out.append(ent.text[:200])
+                    ids_out.append(ent.id)
             return max_sim, texts_out, ids_out
 
     def max_similarity_by_tier(self, text: str) -> Tuple[float, float]:
@@ -355,6 +456,7 @@ class AdversarialMemoryBank:
             self._confirmed = [AdversarialEntry.from_dict(d) for d in payload["confirmed"]]
             self._suspected = [AdversarialEntry.from_dict(d) for d in payload["suspected"]]
             self._by_hash = {e.text_hash: e for e in self._confirmed + self._suspected}
+            self._rebuild_hnsw()
 
     def save_json(self, path: str) -> None:
         """
@@ -393,6 +495,7 @@ class AdversarialMemoryBank:
             self._confirmed = [AdversarialEntry.from_dict(d) for d in payload["confirmed"]]
             self._suspected = [AdversarialEntry.from_dict(d) for d in payload["suspected"]]
             self._by_hash = {e.text_hash: e for e in self._confirmed + self._suspected}
+            self._rebuild_hnsw()
 
     def export_threats(self, include_embeddings: bool = False) -> list[dict]:
         """

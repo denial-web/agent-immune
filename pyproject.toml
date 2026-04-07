@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-immune"
-version = "0.1.1"
+version = "0.2.0"
 description = "Adaptive threat intelligence for AI agent security — semantic memory, multi-turn escalation, output scanning, rate limiting, and prompt hardening."
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -46,6 +46,9 @@ memory = [
 mcp = [
     "mcp[cli]>=1.0",
 ]
+fast-memory = [
+    "hnswlib>=0.7",
+]
 bench = [
     "datasets>=2.14",
     "pandas>=2.0",
@@ -53,6 +56,7 @@ bench = [
 all = [
     "agent-immune[memory]",
     "agent-immune[mcp]",
+    "agent-immune[fast-memory]",
 ]
 dev = [
     "pytest>=7.0",
