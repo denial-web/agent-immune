@@ -25,3 +25,4 @@ bench/results/
 .vscode/
 *.iml
 .coverage
+.mcpregistry_*

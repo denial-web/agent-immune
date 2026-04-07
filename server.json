@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.denial-web/agent-immune",
+  "description": "AI agent security: prompt injection detection, semantic memory, output scanning, prompt hardening",
+  "repository": {
+    "url": "https://github.com/denial-web/agent-immune",
+    "source": "github"
+  },
+  "version": "0.2.1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "agent-immune",
+      "version": "0.2.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtime": "python",
+      "runtimeArgs": ["-m", "agent_immune", "serve", "--transport", "stdio"],
+      "environmentVariables": []
+    }
+  ]
+}
