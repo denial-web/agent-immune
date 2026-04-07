@@ -2,6 +2,18 @@
 
 All notable changes to agent-immune are documented here.
 
+## [0.1.1] — 2026-04-07
+
+### Added
+
+- **MCP server** now included in PyPI package — `pip install 'agent-immune[mcp]'` works from PyPI.
+- **PyPI publish workflow** — auto-publishes on GitHub release via trusted publishing.
+- **CI tests MCP** on Python 3.12+ (skips gracefully on 3.9).
+- **`py.typed`** marker file for PEP 561 typed package support.
+- **`CONTRIBUTING.md`** and **`SECURITY.md`** for open-source best practices.
+- **`glama.json`** for Glama marketplace integration.
+- Glama badge in README.
+
 ## [0.1.0] — 2026-04-04
 
 ### Added
