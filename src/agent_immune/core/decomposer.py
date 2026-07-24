@@ -31,17 +31,27 @@ _NON_LATIN_RE = re.compile(
     r"]"
 )
 
-_QUOTE_REGIONS = re.compile(
-    r"(`{1,3}[^`]+`{1,3}|\"[^\"]{0,500}\"|'[^']{0,500}')",
-    re.DOTALL,
+_QUOTED_SPAN_RE = re.compile(
+    r'"""[\s\S]*?"""'
+    r"|'''[\s\S]*?'''"
+    r"|```[\s\S]*?```"
+    r'|"[^"\n]*"'
+    r"|`[^`\n]*`"
+    r"|'[^'\n]*'"
+    r"|\u201c[^\u201d\n]*\u201d"
+    r"|\u2018[^\u2019\n]*\u2019"
+    r"|\u00ab[^\u00bb\n]*\u00bb"
 )
 
 
-def _inside_quoted(text: str, start: int, end: int) -> bool:
-    for m in _QUOTE_REGIONS.finditer(text):
-        if m.start() <= start < m.end() or m.start() < end <= m.end():
-            return True
-    return False
+def _quoted_spans(text: str) -> list[tuple[int, int]]:
+    """Return ranges that represent quoted or explicitly delimited data."""
+    return [match.span() for match in _QUOTED_SPAN_RE.finditer(text)]
+
+
+def _within_any(span: tuple[int, int], spans: list[tuple[int, int]]) -> bool:
+    start, end = span
+    return any(region_start <= start and end <= region_end for region_start, region_end in spans)
 
 
 class InputDecomposer:
@@ -91,6 +101,43 @@ class InputDecomposer:
                 "injection_reveal",
                 re.compile(
                     r"(reveal|show|print|output|repeat|display)\s+(your\s+)?(system\s+prompt|hidden\s+instructions?|initial\s+prompt|secret\s+rules?)",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_protected_code_request",
+                re.compile(
+                    r"\b(what(?:'s|\s+is)|print|output|reveal|show|share|tell|provide|give|append|include|expose|paste)\b"
+                    r".{0,100}\b((protected|confidential|system|secret)\s+)?access\s+code\b|"
+                    r"\baccess\s+code\s+is\s*$",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_decode_then_execute",
+                re.compile(
+                    r"\bdecode\b.{0,120}\b(do|follow|execute|obey|carry\s+out)\b"
+                    r".{0,60}\b(decoded|text|instruction|it|says)\b",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_framed_execute",
+                re.compile(
+                    r"\b(then|and\s+then)\s+(carry\s+out|execute|comply\s+with|follow|obey)\b"
+                    r".{0,100}\b(action|instruction|request|it|whatever|contains?)\b",
+                    re.I,
+                ),
+                "high",
+            ),
+            (
+                "injection_forged_policy_update",
+                re.compile(
+                    r"\b(system\s+policy\s+update|supersedes\s+all\s+prior\s+policy|"
+                    r"confidentiality\s+rule.{0,40}rescinded)\b",
                     re.I,
                 ),
                 "high",
@@ -390,6 +437,16 @@ class InputDecomposer:
         ]
         self._indirect: List[Tuple[str, re.Pattern[str], str]] = [
             (
+                "indirect_embedded_secret_directive",
+                re.compile(
+                    r"(internal[-_ ]tooling[-_ ]note|system[-_ ]directive|assistant\s*:)"
+                    r".{0,180}\b(include|output|print|append|reveal|show)\b"
+                    r".{0,100}\b(access\s+code|secret\s+code|system\s+prompt)\b",
+                    re.I | re.DOTALL,
+                ),
+                "high",
+            ),
+            (
                 "indirect_html_comment",
                 re.compile(r"<!--\s*.{0,60}?(ignore|forget|override|new\s+instructions?|system\s+prompt)\s*.{0,60}?-->", re.I),
                 "medium",
@@ -426,7 +483,12 @@ class InputDecomposer:
         self._weight_delimiter = 0.15
         self._weight_indirect = 0.15
 
-    def decompose(self, norm: NormalizationResult) -> DecompositionResult:
+    def decompose(
+        self,
+        norm: NormalizationResult,
+        *,
+        treat_quoted_as_data: bool = True,
+    ) -> DecompositionResult:
         """
         Analyze normalized input and return decomposition with threat scores.
 
@@ -441,6 +503,7 @@ class InputDecomposer:
         """
         text = norm.normalized
         original = norm.original
+        quoted_spans = _quoted_spans(text)
         hit_buckets: dict[str, List[PatternHit]] = {
             "injection": [],
             "exfiltration": [],
@@ -454,36 +517,41 @@ class InputDecomposer:
         def scan_group(
             group: List[Tuple[str, re.Pattern[str], str]],
             category: str,
-        ) -> float:
+        ) -> tuple[float, float]:
             """Accumulate unbounded hit strength; caller scales by category weight."""
             score_acc = 0.0
+            quoted_data_acc = 0.0
             bucket = hit_buckets[category]
             for idx, (_name, pat, sev) in enumerate(group):
                 for m in pat.finditer(text):
                     start, end = m.span()
-                    inside = _inside_quoted(text, start, end)
-                    mult = 0.15 if inside else 1.0
+                    inside = _within_any((start, end), quoted_spans)
+                    is_quoted_data = treat_quoted_as_data and category == "injection" and inside
                     sev_f = 1.0 if sev == "high" else (0.3 if sev == "low" else 0.6)
-                    score_acc += sev_f * mult
+                    if is_quoted_data:
+                        quoted_data_acc += sev_f
+                    else:
+                        score_acc += sev_f * (0.15 if inside else 1.0)
                     bucket.append(PatternHit(
                         pattern_idx=idx,
                         span=(start, end),
                         matched_text=m.group(0)[:200],
                         severity=sev,
                         category=category,
-                        inside_quoted=inside,
+                        inside_quoted=is_quoted_data,
                     ))
-                    payload_spans.append((start, end))
-            return score_acc
+                    if not is_quoted_data:
+                        payload_spans.append((start, end))
+            return score_acc, quoted_data_acc
 
-        inj_hits = scan_group(self._injection, "injection")
-        exf_hits = scan_group(self._exfiltration, "exfiltration")
-        sec_hits = scan_group(self._secret, "secret")
-        esc_hits = scan_group(self._escalation, "escalation")
+        inj_hits, quoted_inj_hits = scan_group(self._injection, "injection")
+        exf_hits, _ = scan_group(self._exfiltration, "exfiltration")
+        sec_hits, _ = scan_group(self._secret, "secret")
+        esc_hits, _ = scan_group(self._escalation, "escalation")
         _ = scan_group(self._delimiter, "delimiter")
         ind_hits = 0.0
         if self._detect_indirect:
-            ind_hits = scan_group(self._indirect, "indirect")
+            ind_hits, _ = scan_group(self._indirect, "indirect")
 
         injection_hits = hit_buckets["injection"]
         delimiter_hits = hit_buckets["delimiter"]
@@ -498,7 +566,12 @@ class InputDecomposer:
             + (min(1.0, len(delimiter_hits) * 0.5) * self._weight_delimiter)
             + min(1.0, ind_hits * 0.25) * self._weight_indirect,
         )
-        total_threat_hits = sum(len(hit_buckets[c]) for c in ("injection", "exfiltration", "secret", "escalation", "indirect"))
+        total_threat_hits = sum(
+            1
+            for category in ("injection", "exfiltration", "secret", "escalation", "indirect")
+            for hit in hit_buckets[category]
+            if not (category == "injection" and hit.inside_quoted)
+        )
         hit_boost = min(0.6, 0.18 * (total_threat_hits + len(delimiter_hits)))
 
         khmer_chars = len(_KHMER_RE.findall(text))
@@ -512,6 +585,7 @@ class InputDecomposer:
             pattern_linear = min(1.0, pattern_linear + 0.2)
 
         injection_score = min(1.0, pattern_linear + language_mixing_score * 0.25 + hit_boost)
+        quoted_data_score = min(0.4, quoted_inj_hits * 0.2)
 
         merged_spans = self._merge_spans(payload_spans, len(text))
         clean_text = self._redact_spans(text, merged_spans)
@@ -520,6 +594,7 @@ class InputDecomposer:
             original=original,
             clean_text=clean_text,
             injection_score=injection_score,
+            quoted_data_score=quoted_data_score,
             language_mixing_score=language_mixing_score,
             khmer_ratio=khmer_ratio,
             injection_hits=injection_hits,

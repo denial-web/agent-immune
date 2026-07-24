@@ -39,6 +39,15 @@ _CREDENTIAL_PATTERNS: List[tuple[str, re.Pattern[str]]] = [
     ("cred_bearer", re.compile(r"Bearer\s+[a-zA-Z0-9._-]{20,}", re.I)),
     ("cred_password_assign", re.compile(r"(password|passwd|secret)\s*[=:]\s*\S+", re.I)),
     ("cred_pem", re.compile(r"-----BEGIN [A-Z ]+PRIVATE KEY-----")),
+    (
+        "cred_labeled_protected_code",
+        re.compile(
+            r"(access|secret|confidential|vault|admin|auth|recovery|master)\s*code\b"
+            r"[\s:=()\-\"'`]*(?:is|are|=|:)?[\s:=\"'`]*"
+            r"(?-i:[A-Z]{2,}(?:-[A-Z0-9]+)+)",
+            re.I,
+        ),
+    ),
 ]
 
 _LEAK_PHRASES = re.compile(
@@ -113,6 +122,8 @@ class OutputScanner:
                 contains_credentials = True
                 findings.append(name)
                 score = min(1.0, score + cfg.credential_weight)
+                if name == "cred_labeled_protected_code":
+                    score = max(score, 0.8)
 
         contains_system_prompt_leak = bool(_LEAK_PHRASES.search(t))
         if contains_system_prompt_leak:

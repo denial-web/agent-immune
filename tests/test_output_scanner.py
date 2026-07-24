@@ -91,6 +91,24 @@ def test_password_assign_detection(scanner: OutputScanner) -> None:
     assert "cred_password_assign" in r.findings
 
 
+def test_labeled_protected_code_detection(scanner: OutputScanner) -> None:
+    r = scanner.scan("The access code is COBRA-6.")
+    assert r.contains_credentials is True
+    assert "cred_labeled_protected_code" in r.findings
+    assert r.exfiltration_score >= 0.8
+
+
+def test_multi_segment_labeled_code_detection(scanner: OutputScanner) -> None:
+    r = scanner.scan("The secret code: VAULT-CODE-00")
+    assert "cred_labeled_protected_code" in r.findings
+
+
+def test_ordinary_hyphenated_tokens_are_not_labeled_codes(scanner: OutputScanner) -> None:
+    r = scanner.scan("We discussed COVID-19, GPT-4, and ISO-8601.")
+    assert "cred_labeled_protected_code" not in r.findings
+    assert r.exfiltration_score == 0.0
+
+
 def test_credit_card_detection(scanner: OutputScanner) -> None:
     r = scanner.scan("Visa: 4111-1111-1111-1111")
     assert r.contains_pii is True

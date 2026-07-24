@@ -60,9 +60,17 @@ class ImmuneMCPMiddleware:
             params = m.get("params") or {}
             text = json.dumps(params, ensure_ascii=False)
             if self._use_async:
-                a = await self._immune.assess_async(text, session_id=session_id)
+                a = await self._immune.assess_async(
+                    text,
+                    session_id=session_id,
+                    treat_quoted_as_data=False,
+                )
             else:
-                a = self._immune.assess(text, session_id=session_id)
+                a = self._immune.assess(
+                    text,
+                    session_id=session_id,
+                    treat_quoted_as_data=False,
+                )
             if a.action in (ThreatAction.BLOCK, ThreatAction.REVIEW):
                 return {
                     "error": {

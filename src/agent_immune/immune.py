@@ -85,7 +85,13 @@ class AdaptiveImmuneSystem:
         """The active security policy."""
         return self._policy
 
-    def assess(self, text: str, session_id: str = "default") -> ThreatAssessment:
+    def assess(
+        self,
+        text: str,
+        session_id: str = "default",
+        *,
+        treat_quoted_as_data: bool = True,
+    ) -> ThreatAssessment:
         """
         Assess user or tool input text.
 
@@ -110,7 +116,10 @@ class AdaptiveImmuneSystem:
 
         t0 = _time.monotonic()
         norm = self._normalizer.normalize(text)
-        decomp = self._decomposer.decompose(norm)
+        decomp = self._decomposer.decompose(
+            norm,
+            treat_quoted_as_data=treat_quoted_as_data,
+        )
 
         pattern_score = float(decomp.injection_score)
         memory_score = 0.0
@@ -147,6 +156,18 @@ class AdaptiveImmuneSystem:
             session_id=session_id,
             history_score=hist,
         )
+        if decomp.quoted_data_score > 0:
+            feedback = [
+                *assessment.feedback,
+                f"quoted_data_score={decomp.quoted_data_score:.3f}",
+            ]
+            updates: dict[str, object] = {"feedback": feedback}
+            if assessment.action == ThreatAction.ALLOW:
+                updates.update({
+                    "action": ThreatAction.SANITIZE,
+                    "threat_score": max(assessment.threat_score, self._policy.allow_threshold),
+                })
+            assessment = assessment.model_copy(update=updates)
         assessment = assessment.model_copy(update={"normalization": norm})
 
         self._cycles += 1
@@ -390,9 +411,20 @@ class AdaptiveImmuneSystem:
     # Async API — non-blocking wrappers for use in async agent frameworks
     # ------------------------------------------------------------------
 
-    async def assess_async(self, text: str, session_id: str = "default") -> ThreatAssessment:
+    async def assess_async(
+        self,
+        text: str,
+        session_id: str = "default",
+        *,
+        treat_quoted_as_data: bool = True,
+    ) -> ThreatAssessment:
         """Async version of :meth:`assess`. Runs CPU-bound work in a thread."""
-        return await asyncio.to_thread(self.assess, text, session_id)
+        return await asyncio.to_thread(
+            self.assess,
+            text,
+            session_id,
+            treat_quoted_as_data=treat_quoted_as_data,
+        )
 
     async def assess_output_async(self, text: str, session_id: str = "default") -> OutputScanResult:
         """Async version of :meth:`assess_output`."""
