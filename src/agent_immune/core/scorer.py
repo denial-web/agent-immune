@@ -91,6 +91,25 @@ class ThreatScorer:
         elif self._escalation_upgrade and is_escalating and threat_score >= 0.40:
             action = max_action(action, ThreatAction.SANITIZE)
 
+        high_unquoted_injection = bool(
+            decomposition
+            and any(
+                hit.severity == "high" and not hit.inside_quoted
+                for hit in decomposition.injection_hits
+            )
+        )
+        high_indirect_directive = bool(
+            decomposition
+            and any(hit.severity == "high" for hit in decomposition.indirect_hits)
+        )
+        high_blocking_pattern = high_unquoted_injection or high_indirect_directive
+        if high_blocking_pattern:
+            # A high-confidence bare injection reaches the default BLOCK floor,
+            # while custom permissive policies still retain their documented
+            # ability to raise thresholds.
+            threat_score = max(threat_score, min(self._block, 0.72))
+            action = self._to_action(threat_score)
+
         feedback: List[str] = []
         feedback.append(f"aggregate_score={threat_score:.3f}")
         feedback.append(f"pattern={pattern_score:.3f} memory={memory_score:.3f} trajectory={trajectory_score:.3f}")
@@ -100,6 +119,8 @@ class ThreatScorer:
             feedback.append(f"memory_matches={len(memory_matches)}")
         if is_escalating:
             feedback.append("escalation_detected")
+        if high_blocking_pattern:
+            feedback.append("high_blocking_pattern")
 
         assessment = ThreatAssessment(
             threat_score=threat_score,

@@ -69,6 +69,12 @@ class DecompositionResult(BaseModel):
     original: str
     clean_text: str
     injection_score: float = Field(ge=0.0, le=1.0)
+    quoted_data_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        default=0.0,
+        description="Injection-pattern signal found only inside quoted/delimited data spans",
+    )
     language_mixing_score: float = Field(ge=0.0, le=1.0)
     khmer_ratio: float = Field(ge=0.0, le=1.0)
     injection_hits: List[PatternHit] = Field(default_factory=list)
